@@ -11,6 +11,12 @@
 .vault_pass
 vault_pass.txt
 *.vault_pass
+# vault.yml files hold real credentials and must stay unencrypted only
+# locally, if at all -- if you do commit one, encrypt it with `ansible-vault
+# encrypt` first and remove it from this ignore. .example templates are
+# always safe to commit.
+vault.yml
+!vault.yml.example
 
 # Secrets / local overrides
 secrets.yml
