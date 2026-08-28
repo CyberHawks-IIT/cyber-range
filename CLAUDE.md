@@ -452,13 +452,30 @@ After the domain build above, did a cleanup pass and took a fresh snapshot:
   post-domain-build state (as opposed to `initial`, which is pre-domain,
   pre-everything). All 6 shut down cleanly via `qm shutdown`, snapshotted,
   restarted.
-  **workstation (VMID 326) was NOT included** — it was mid-Windows-Update at
-  snapshot time (user flagged this), so it was left running and excluded from
-  this round. **Still needs its own `domain-configured` snapshot** once the
-  user confirms the update finished — shut it down cleanly first
-  (`qm shutdown 326`), take the snapshot with the exact same name/description
-  as above so all 7 stay consistent, then restart it. Until that happens,
-  workstation is the one VM without a post-domain snapshot to roll back to.
+  **workstation (VMID 326) was snapshotted separately** shortly after, once
+  its Windows Update finished and the user gave the go-ahead — same snapshot
+  name/description as the other 6, so all 7 are now consistent.
+
+**Automatic updates disabled on all 7 VMs (2026-08-27), after the snapshot
+above** — done via registry policy (`HKLM:\SOFTWARE\Policies\Microsoft\Windows\
+WindowsUpdate\AU`, `NoAutoUpdate=1` + `AUOptions=1`, both DWord), applied
+directly over WinRM rather than via a domain GPO (simpler, immediate, doesn't
+depend on group policy refresh timing — a GPO would be the more "proper"
+long-term/centralized way if that's ever wanted, but wasn't necessary here).
+Verified present on all 7 afterward. Followed up by restarting `wuauserv` on
+each so the policy takes effect immediately rather than waiting for its next
+natural read — this succeeded cleanly on dc2/ca/web/sql2/workstation, but
+**hung indefinitely in `STOP_PENDING` on dc1 and sql1** (both Windows Server
+2016, template 300 — consistent with the 300/302 template's other quirks
+documented elsewhere in this file, though this specific symptom hadn't been
+seen before). Confirmed harmless and left as-is rather than force-killing
+anything: `sc queryex wuauserv` on both showed a frozen checkpoint (`0x2`)
+with no progress, but NTDS/DNS/Netlogon on dc1 and MSSQLSERVER on sql1 stayed
+fully healthy throughout — the stuck service didn't affect anything critical,
+and since the registry policy is already durably set regardless of the
+service's live state, forcing the restart through wasn't worth the risk on
+a domain controller. Worth knowing if `wuauserv` needs restarting again on a
+Server 2016 box in this range: expect it to hang and don't force it.
 - **README.md added** at repo root — project overview, prerequisites,
   architecture table, repo layout, getting-started steps. Deliberately
   excludes the three standalone Debian tool boxes (sysreptor/nessus/
@@ -679,10 +696,8 @@ cyber-range/
    misconfigurations, starter accounts, delegation setups, ESC-vulnerable
    templates, the CyberHawks Employee Portal website, or the SMB file dump
    have been built yet.
-7. workstation still needs a `domain-configured` snapshot (see Post-build
-   cleanup & snapshot section above) — it was mid-Windows-Update and excluded
-   from the 2026-08-27 snapshot round on the other 6 VMs. Waiting on the user
-   to confirm the update is done.
+7. ~~workstation still needs a `domain-configured` snapshot~~ — done
+   2026-08-27, all 7 VMs now share the same snapshot.
 
 ## GitHub
 
