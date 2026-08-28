@@ -52,6 +52,14 @@
   changed_when: "'ERROR' not in mime_result.stderr"
   failed_when: false
 
+- name: Remove IIS's default welcome page (it wins over Default.aspx in the default-document list otherwise)
+  ansible.windows.win_file:
+    path: "C:\\inetpub\\wwwroot\\{{ item }}"
+    state: absent
+  loop:
+    - iisstart.htm
+    - iisstart.png
+
 - name: Set default document to Default.aspx via appcmd
   ansible.windows.win_shell: >
     & "$env:windir\system32\inetsrv\appcmd.exe" set config "Default Web Site" /section:defaultDocument /+"files.[value='Default.aspx']" /commit:apphost
