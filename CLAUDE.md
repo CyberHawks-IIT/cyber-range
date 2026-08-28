@@ -8,6 +8,13 @@ IP — no separate tunnel/proxy config needed per host).
 This repo holds the Ansible code used to provision/configure range hosts, plus
 this file as the running source of truth for project context across sessions.
 
+## Working conventions
+
+- **Always `git commit` and `git push` after making changes in this repo** —
+  don't batch changes up or wait to be asked. This applies to every change
+  (CLAUDE.md updates, Ansible code, anything else tracked here), not just
+  end-of-session wrap-ups.
+
 ## Control host
 
 Working from a Windows 11 machine (`C:\Tools` is the general tools directory this
