@@ -234,6 +234,28 @@
     max-width: 68ch;
   }
 
+  .subhead {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: "IBM Plex Sans", sans-serif;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    font-weight: 700;
+    color: var(--text-muted);
+    margin: 26px 0 10px;
+  }
+  .subhead:first-of-type { margin-top: 0; }
+  .subhead .swatch {
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+    background: var(--accent);
+    flex-shrink: 0;
+  }
+  .subhead.alt .swatch { background: var(--text-muted); }
+
   /* ---------- tables ---------- */
 
   .tablewrap {
@@ -392,6 +414,7 @@
     <nav class="navlinks">
       <a href="#hosts">Hosts</a>
       <a href="#access">Access</a>
+      <a href="#serviceabuse">Service Abuse</a>
       <a href="#delegation">Delegation</a>
       <a href="#aclabuse">ACL Abuse</a>
       <a href="#credexposure">Cred Exposure</a>
@@ -401,7 +424,6 @@
       <a href="#web">Web</a>
       <a href="#adcs">ADCS</a>
       <a href="#workstation">Workstation</a>
-      <a href="#serviceabuse">Service Abuse</a>
       <a href="#notes">Notes</a>
     </nav>
   </div>
@@ -422,7 +444,9 @@
 <main>
 
   <section id="hosts">
-    <div class="section-head"><h2>Hosts</h2><span class="section-count">7 machines</span></div>
+    <div class="section-head"><h2>Hosts</h2><span class="section-count">7 AD + 2 standalone</span></div>
+
+    <div class="subhead"><span class="swatch"></span>AD Range — cyberhawks.lab (10.0.2.0/24)</div>
     <div class="tablewrap">
       <table>
         <thead><tr><th>Host</th><th>IP</th><th>OS</th><th>Role</th></tr></thead>
@@ -438,6 +462,17 @@
       </table>
     </div>
     <p class="section-note">computer, computer2, computer3, computer4, and computer5 also resolve on this subnet (10.0.2.51–.55) but are AD objects only — no OS behind them. They appear as targets below.</p>
+
+    <div class="subhead alt"><span class="swatch"></span>Standalone — not domain-joined</div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Host</th><th>IP</th><th>OS</th><th>Role</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">demo</td><td class="mono">10.1.1.1</td><td>Debian 13</td><td>Network-service abuse practice — see below</td></tr>
+          <tr><td class="mono">test</td><td class="mono">10.0.2.10</td><td>Debian 12</td><td>Attacker box for NTLM Relay Practice — see below</td></tr>
+        </tbody>
+      </table>
+    </div>
   </section>
 
   <section id="access">
@@ -459,9 +494,32 @@
         <div class="k">Attacker box — SSH</div>
         <div class="credrow"><span class="label">Host</span><span class="val">10.0.2.10</span></div>
         <div class="credrow"><span class="label">Login</span><span class="val">test / test</span></div>
-        <div class="desc">Debian 12, off-domain. Responder, Pretender, mitm6, and impacket (incl. <span class="mono">ntlmrelayx.py</span>) are pre-installed for the NTLM Relay Practice findings below.</div>
+        <div class="desc">Debian 12, off-domain. Responder, Pretender, mitm6, and impacket (incl. <span class="mono">ntlmrelayx.py</span>) are pre-installed for the NTLM Relay Practice findings further down.</div>
       </div>
     </div>
+  </section>
+
+  <section id="serviceabuse">
+    <div class="section-head"><h2>Service Abuse Practice</h2><span class="section-count">10 findings</span></div>
+    <p class="section-note">A separate, non-domain Linux host at <span class="mono">10.1.1.1</span> (Debian, hostname <span class="mono">demo</span>) for practicing classic network-service misconfigurations — nothing here needs a <span class="mono">cyberhawks.lab</span> credential.</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th style="width:34%">Finding</th><th style="width:28%">Source</th><th>Target</th></tr></thead>
+        <tbody>
+          <tr><td class="finding">FTP anonymous login</td><td class="who">unauthenticated</td><td class="target mono">FTP (21)</td></tr>
+          <tr><td class="finding">TFTP file with a guessable name</td><td class="who">unauthenticated</td><td class="target mono">TFTP (69/udp)</td></tr>
+          <tr><td class="finding">SNMPv1 default community strings</td><td class="who">unauthenticated</td><td class="target mono">SNMP (161/udp)</td></tr>
+          <tr><td class="finding">SMTP open mail relay</td><td class="who">unauthenticated</td><td class="target mono">SMTP (25)</td></tr>
+          <tr><td class="finding">SMTP VRFY user enumeration</td><td class="who">unauthenticated</td><td class="target mono">SMTP (25)</td></tr>
+          <tr><td class="finding">VNC with no authentication</td><td class="who">unauthenticated</td><td class="target mono">VNC (5901)</td></tr>
+          <tr><td class="finding">NFS mountable, writable export</td><td class="who">unauthenticated</td><td class="target mono">NFS (2049)</td></tr>
+          <tr><td class="finding">SSH guessable credentials</td><td class="who">unauthenticated</td><td class="target mono">SSH (22)</td></tr>
+          <tr><td class="finding">Telnet guessable credentials</td><td class="who">unauthenticated</td><td class="target mono">Telnet (23)</td></tr>
+          <tr><td class="finding">SMB null-session share</td><td class="who">unauthenticated</td><td class="target mono">SMB (445)</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="section-note">The SSH and Telnet accounts are both <span class="mono">administrator</span> / <span class="mono">password</span> — straight out of SecLists' <span class="mono">ssh-betterdefaultpasslist</span>.</p>
   </section>
 
   <section id="delegation">
@@ -615,29 +673,6 @@
         </tbody>
       </table>
     </div>
-  </section>
-
-  <section id="serviceabuse">
-    <div class="section-head"><h2>Service Abuse Practice</h2><span class="section-count">10 findings</span></div>
-    <p class="section-note">A separate, non-domain Linux host at <span class="mono">10.1.1.1</span> (Debian, hostname <span class="mono">demo</span>) for practicing classic network-service misconfigurations — nothing here needs a <span class="mono">cyberhawks.lab</span> credential.</p>
-    <div class="tablewrap">
-      <table>
-        <thead><tr><th style="width:34%">Finding</th><th style="width:28%">Source</th><th>Target</th></tr></thead>
-        <tbody>
-          <tr><td class="finding">FTP anonymous login</td><td class="who">unauthenticated</td><td class="target mono">FTP (21)</td></tr>
-          <tr><td class="finding">TFTP file with a guessable name</td><td class="who">unauthenticated</td><td class="target mono">TFTP (69/udp)</td></tr>
-          <tr><td class="finding">SNMPv1 default community strings</td><td class="who">unauthenticated</td><td class="target mono">SNMP (161/udp)</td></tr>
-          <tr><td class="finding">SMTP open mail relay</td><td class="who">unauthenticated</td><td class="target mono">SMTP (25)</td></tr>
-          <tr><td class="finding">SMTP VRFY user enumeration</td><td class="who">unauthenticated</td><td class="target mono">SMTP (25)</td></tr>
-          <tr><td class="finding">VNC with no authentication</td><td class="who">unauthenticated</td><td class="target mono">VNC (5901)</td></tr>
-          <tr><td class="finding">NFS mountable, writable export</td><td class="who">unauthenticated</td><td class="target mono">NFS (2049)</td></tr>
-          <tr><td class="finding">SSH guessable credentials</td><td class="who">unauthenticated</td><td class="target mono">SSH (22)</td></tr>
-          <tr><td class="finding">Telnet guessable credentials</td><td class="who">unauthenticated</td><td class="target mono">Telnet (23)</td></tr>
-          <tr><td class="finding">SMB null-session share</td><td class="who">unauthenticated</td><td class="target mono">SMB (445)</td></tr>
-        </tbody>
-      </table>
-    </div>
-    <p class="section-note">The SSH and Telnet accounts are both <span class="mono">administrator</span> / <span class="mono">password</span> — straight out of SecLists' <span class="mono">ssh-betterdefaultpasslist</span>.</p>
   </section>
 
   <section id="notes">
