@@ -9,16 +9,18 @@
 #   ./create_testing_vms.sh --csv /root/roster.csv
 #
 # Defaults match the existing 610-623 setup: --group Students,
-# --templates 604:windows,605:kali, --start-clone-id 610 — override any of
-# these if you're provisioning a different roster/template set. VMID and IP
-# collisions with whatever already exists on the host are detected and
-# stepped around automatically (see below), so re-running with the same
-# defaults over an appended CSV is safe and requires no manual bookkeeping.
+# --templates 604:windows,605:kali, --start-clone-id 610, --pool Attackers —
+# override any of these if you're provisioning a different roster/template
+# set. VMID and IP collisions with whatever already exists on the host are
+# detected and stepped around automatically (see below), so re-running with
+# the same defaults over an appended CSV is safe and requires no manual
+# bookkeeping.
 #
 # For each CSV row this:
 #   1. creates a PVE user (name/email/username/password), adding it to --group
 #   2. clones every template in --templates (in the order given) to the next
-#      free VMID at/after --start-clone-id
+#      free VMID at/after --start-clone-id, adding each clone to --pool
+#      (pass --pool "" to skip pool assignment)
 #   3. names each clone "<username>-<templatename>"
 #   4. sets a unique cloud-init IP per clone (see IP scheme below)
 #   5. grants the student --role (default PVEVMAdmin) on each of their VMs
@@ -75,6 +77,7 @@ CSV_FILE=""
 GROUP="Students"
 TEMPLATES_SPEC="604:windows,605:kali"
 START_CLONE_ID=610
+POOL="Attackers"
 
 # ---------------------------------------------------------------------------
 # Logging helpers
@@ -92,7 +95,7 @@ run()  {
 }
 
 usage() {
-  sed -n '2,40p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,52p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 # ---------------------------------------------------------------------------
@@ -104,6 +107,7 @@ while [[ $# -gt 0 ]]; do
     --group)             GROUP="$2"; shift 2 ;;
     --templates)         TEMPLATES_SPEC="$2"; shift 2 ;;
     --start-clone-id)    START_CLONE_ID="$2"; shift 2 ;;
+    --pool)              POOL="$2"; shift 2 ;;
     --realm)             REALM="$2"; shift 2 ;;
     --role)              ROLE="$2"; shift 2 ;;
     --full)              CLONE_MODE="full"; shift ;;
@@ -190,6 +194,10 @@ pve_group_exists() {
   pvesh get "/access/groups/$1" >/dev/null 2>&1
 }
 
+pve_pool_exists() {
+  pvesh get "/pools/$1" >/dev/null 2>&1
+}
+
 declare -A EXISTING_IPS=()
 for id in "${EXISTING_VMIDS[@]}"; do
   ip="$(qm config "$id" 2>/dev/null | sed -n 's/^ipconfig0:.*ip=\([0-9.]*\)\/.*/\1/p')"
@@ -241,6 +249,18 @@ if pve_group_exists "$GROUP"; then
 else
   log "Creating group '$GROUP'"
   run pveum group add "$GROUP"
+fi
+
+# ---------------------------------------------------------------------------
+# Ensure target pool exists (skip entirely if --pool "" was passed)
+# ---------------------------------------------------------------------------
+if [[ -n "$POOL" ]]; then
+  if pve_pool_exists "$POOL"; then
+    log "Pool '$POOL' already exists"
+  else
+    log "Creating pool '$POOL'"
+    run pveum pool add "$POOL"
+  fi
 fi
 
 # ---------------------------------------------------------------------------
@@ -337,12 +357,17 @@ while IFS=',' read -r raw_name raw_email raw_username raw_password || [[ -n "${r
     fi
 
     newid="$(next_free_vmid)"
-    log "Cloning template $tid -> VMID $newid ('$vm_name'), ip=$ip/$NETMASK"
+    if [[ -n "$POOL" ]]; then
+      log "Cloning template $tid -> VMID $newid ('$vm_name'), ip=$ip/$NETMASK, pool=$POOL"
+    else
+      log "Cloning template $tid -> VMID $newid ('$vm_name'), ip=$ip/$NETMASK"
+    fi
 
     clone_args=(clone "$tid" "$newid" --name "$vm_name")
     if [[ "$CLONE_MODE" == "full" ]]; then
       clone_args+=(--full --storage "$STORAGE")
     fi
+    [[ -n "$POOL" ]] && clone_args+=(--pool "$POOL")
     run qm "${clone_args[@]}"
 
     run qm set "$newid" \
@@ -361,7 +386,7 @@ while IFS=',' read -r raw_name raw_email raw_username raw_password || [[ -n "${r
       run qm start "$newid"
     fi
 
-    SUMMARY+=("$username|$vm_name|$newid|$ip/$NETMASK|$ROLE")
+    SUMMARY+=("$username|$vm_name|$newid|$ip/$NETMASK|$ROLE|${POOL:--}")
   done
 done < "$CSV_FILE"
 
@@ -370,10 +395,10 @@ done < "$CSV_FILE"
 # ---------------------------------------------------------------------------
 echo
 log "Done. Created/updated:"
-printf '%-14s %-26s %-8s %-18s %s\n' "USERNAME" "VM NAME" "VMID" "IP" "ROLE"
+printf '%-14s %-26s %-8s %-18s %-14s %s\n' "USERNAME" "VM NAME" "VMID" "IP" "ROLE" "POOL"
 for row in "${SUMMARY[@]}"; do
-  IFS='|' read -r u n id ip role <<< "$row"
-  printf '%-14s %-26s %-8s %-18s %s\n' "$u" "$n" "$id" "$ip" "$role"
+  IFS='|' read -r u n id ip role pool <<< "$row"
+  printf '%-14s %-26s %-8s %-18s %-14s %s\n' "$u" "$n" "$id" "$ip" "$role" "$pool"
 done
 
 if [[ "$DRY_RUN" -eq 1 ]]; then
