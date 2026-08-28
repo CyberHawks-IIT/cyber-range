@@ -432,7 +432,7 @@
 <div class="hero">
   <p class="eyebrow">Training Range Briefing</p>
   <h1>CyberHawks Range</h1>
-  <p class="lede">A single Windows domain, deliberately misconfigured across every major attack surface: Kerberos delegation, AD access control, credential hygiene, SQL Server, a web app, and Active Directory Certificate Services — plus a standalone Linux host for classic network-service abuse. Everything below is reachable from the starter access you're handed — nothing requires guessing.</p>
+  <p class="lede">A single Windows domain, deliberately misconfigured across every major attack surface: Kerberos delegation, AD access control, credential hygiene, SQL Server, a web app, and Active Directory Certificate Services, plus a standalone Linux host for classic network-service abuse. Everything below is reachable from the starter access you're handed. Nothing requires guessing.</p>
   <div class="statline">
     <div class="stat"><span class="k">Domain</span><span class="v mono">cyberhawks.lab</span></div>
     <div class="stat"><span class="k">NetBIOS</span><span class="v mono">CYBERHAWKS</span></div>
@@ -446,7 +446,7 @@
   <section id="hosts">
     <div class="section-head"><h2>Hosts</h2><span class="section-count">7 AD + 2 standalone</span></div>
 
-    <div class="subhead"><span class="swatch"></span>AD Range — cyberhawks.lab (10.0.2.0/24)</div>
+    <div class="subhead"><span class="swatch"></span>AD Range - cyberhawks.lab (10.0.2.0/24)</div>
     <div class="tablewrap">
       <table>
         <thead><tr><th>Host</th><th>IP</th><th>OS</th><th>Role</th></tr></thead>
@@ -454,22 +454,22 @@
           <tr><td class="mono">dc1</td><td class="mono">10.0.2.2</td><td>Server 2016</td><td>Domain Controller</td></tr>
           <tr><td class="mono">dc2</td><td class="mono">10.0.2.3</td><td>Server 2019</td><td>Domain Controller</td></tr>
           <tr><td class="mono">ca</td><td class="mono">10.0.2.4</td><td>Server 2019</td><td>Certificate Authority (cyberhawks-CA)</td></tr>
-          <tr><td class="mono">web</td><td class="mono">10.0.2.5</td><td>Server 2022</td><td>IIS — CyberHawks Employee Portal</td></tr>
+          <tr><td class="mono">web</td><td class="mono">10.0.2.5</td><td>Server 2022</td><td>IIS - CyberHawks Employee Portal</td></tr>
           <tr><td class="mono">sql1</td><td class="mono">10.0.2.6</td><td>Server 2016</td><td>SQL Server 2016</td></tr>
           <tr><td class="mono">sql2</td><td class="mono">10.0.2.7</td><td>Server 2022</td><td>SQL Server 2022</td></tr>
           <tr><td class="mono">workstation</td><td class="mono">10.0.2.8</td><td>Windows 11</td><td>Client workstation</td></tr>
         </tbody>
       </table>
     </div>
-    <p class="section-note">computer, computer2, computer3, computer4, and computer5 also resolve on this subnet (10.0.2.51–.55) but are AD objects only — no OS behind them. They appear as targets below.</p>
+    <p class="section-note">computer, computer2, computer3, computer4, and computer5 also resolve on this subnet (10.0.2.51-.55), but they're AD objects only, with no OS behind them. They appear as targets below.</p>
 
-    <div class="subhead alt"><span class="swatch"></span>Standalone — not domain-joined</div>
+    <div class="subhead alt"><span class="swatch"></span>Standalone - not domain-joined</div>
     <div class="tablewrap">
       <table>
         <thead><tr><th>Host</th><th>IP</th><th>OS</th><th>Role</th></tr></thead>
         <tbody>
-          <tr><td class="mono">demo</td><td class="mono">10.1.1.1</td><td>Debian 13</td><td>Network-service abuse practice — see below</td></tr>
-          <tr><td class="mono">test</td><td class="mono">10.0.2.10</td><td>Debian 12</td><td>Attacker box for NTLM Relay Practice — see below</td></tr>
+          <tr><td class="mono">demo</td><td class="mono">10.1.1.1</td><td>Debian 13</td><td>Network-service abuse practice (see below)</td></tr>
+          <tr><td class="mono">test</td><td class="mono">10.0.2.10</td><td>Debian 12</td><td>Attacker box for NTLM Relay Practice (see below)</td></tr>
         </tbody>
       </table>
     </div>
@@ -488,10 +488,10 @@
         <div class="k">Computer account</div>
         <div class="credrow"><span class="label">Username</span><span class="val">computer$</span></div>
         <div class="credrow"><span class="label">Password</span><span class="val">password</span></div>
-        <div class="desc">Used as the attacker-controlled identity for the RBCD finding. Not a real host — see note above.</div>
+        <div class="desc">Used as the attacker-controlled identity for the RBCD finding. Not a real host (see note above).</div>
       </div>
       <div class="access-card">
-        <div class="k">Attacker box — SSH</div>
+        <div class="k">Attacker box - SSH</div>
         <div class="credrow"><span class="label">Host</span><span class="val">10.0.2.10</span></div>
         <div class="credrow"><span class="label">Login</span><span class="val">test / test</span></div>
         <div class="desc">Debian 12, off-domain. Responder, Pretender, mitm6, and impacket (incl. <span class="mono">ntlmrelayx.py</span>) are pre-installed for the NTLM Relay Practice findings further down.</div>
@@ -501,7 +501,7 @@
 
   <section id="serviceabuse">
     <div class="section-head"><h2>Service Abuse Practice</h2><span class="section-count">10 findings</span></div>
-    <p class="section-note">A separate, non-domain Linux host at <span class="mono">10.1.1.1</span> (Debian, hostname <span class="mono">demo</span>) for practicing classic network-service misconfigurations — nothing here needs a <span class="mono">cyberhawks.lab</span> credential.</p>
+    <p class="section-note">A separate, non-domain Linux host at <span class="mono">10.1.1.1</span> (Debian, hostname <span class="mono">demo</span>) for practicing classic network-service misconfigurations. Nothing here needs a <span class="mono">cyberhawks.lab</span> credential.</p>
     <div class="tablewrap">
       <table>
         <thead><tr><th style="width:34%">Finding</th><th style="width:28%">Source</th><th>Target</th></tr></thead>
@@ -519,18 +519,18 @@
         </tbody>
       </table>
     </div>
-    <p class="section-note">The SSH and Telnet accounts are both <span class="mono">administrator</span> / <span class="mono">password</span> — straight out of SecLists' <span class="mono">ssh-betterdefaultpasslist</span>.</p>
+    <p class="section-note">The SSH and Telnet accounts are both <span class="mono">administrator</span> / <span class="mono">password</span>, straight out of SecLists' <span class="mono">ssh-betterdefaultpasslist</span>.</p>
   </section>
 
   <section id="delegation">
-    <div class="section-head"><h2>Kerberos Delegation</h2><span class="section-count">5 findings — one of every type</span></div>
+    <div class="section-head"><h2>Kerberos Delegation</h2><span class="section-count">5 findings - one of every type</span></div>
     <div class="tablewrap">
       <table>
         <thead><tr><th style="width:34%">Finding</th><th style="width:28%">Source</th><th>Target</th></tr></thead>
         <tbody>
           <tr><td class="finding">Unconstrained Delegation</td><td class="who">user (local admin) <span class="arrow">or</span> PrinterBug coercion vs. a DC</td><td class="target mono">web$</td></tr>
-          <tr><td class="finding">Constrained Delegation — no protocol transition</td><td class="who">any domain user, via sql1's sysadmin bug</td><td class="target mono">sql1$ <span class="arrow">→</span> CIFS/dc1</td></tr>
-          <tr><td class="finding">Constrained Delegation — w/ protocol transition (T2A4D)</td><td class="who">user, via LAPS-granted admin on sql2</td><td class="target mono">sql2$ <span class="arrow">→</span> CIFS/dc1</td></tr>
+          <tr><td class="finding">Constrained Delegation - no protocol transition</td><td class="who">any domain user, via sql1's sysadmin bug</td><td class="target mono">sql1$ <span class="arrow">→</span> CIFS/dc1</td></tr>
+          <tr><td class="finding">Constrained Delegation - w/ protocol transition (T2A4D)</td><td class="who">user, via LAPS-granted admin on sql2</td><td class="target mono">sql2$ <span class="arrow">→</span> CIFS/dc1</td></tr>
           <tr><td class="finding">Resource-Based Constrained Delegation</td><td class="who">user's ACL write, using computer as the delegate</td><td class="target mono">computer2</td></tr>
           <tr><td class="finding">Shadow Credentials</td><td class="who">user (write on msDS-KeyCredentialLink)</td><td class="target mono">computer3</td></tr>
         </tbody>
@@ -539,15 +539,15 @@
   </section>
 
   <section id="aclabuse">
-    <div class="section-head"><h2>AD Access Control</h2><span class="section-count">8 rights — all held by user</span></div>
+    <div class="section-head"><h2>AD Access Control</h2><span class="section-count">8 rights - all held by user</span></div>
     <div class="tablewrap">
       <table>
         <thead><tr><th style="width:34%">Right</th><th style="width:28%">Source</th><th>Target</th></tr></thead>
         <tbody>
-          <tr><td class="finding">WriteDacl</td><td class="who">user</td><td class="target">pool account — enumerate</td></tr>
-          <tr><td class="finding">GenericWrite</td><td class="who">user</td><td class="target">pool account — enumerate</td></tr>
-          <tr><td class="finding">ForceChangePassword</td><td class="who">user</td><td class="target">pool account — enumerate</td></tr>
-          <tr><td class="finding">WriteOwner</td><td class="who">user</td><td class="target">pool account — enumerate</td></tr>
+          <tr><td class="finding">WriteDacl</td><td class="who">user</td><td class="target">pool account - enumerate</td></tr>
+          <tr><td class="finding">GenericWrite</td><td class="who">user</td><td class="target">pool account - enumerate</td></tr>
+          <tr><td class="finding">ForceChangePassword</td><td class="who">user</td><td class="target">pool account - enumerate</td></tr>
+          <tr><td class="finding">WriteOwner</td><td class="who">user</td><td class="target">pool account - enumerate</td></tr>
           <tr><td class="finding">Self (group membership)</td><td class="who">user</td><td class="target mono">Domain Admins</td></tr>
           <tr><td class="finding">GenericAll</td><td class="who">user</td><td class="target mono">Default Domain Policy GPO</td></tr>
           <tr><td class="finding">DCSync (Get-Changes + Get-Changes-All)</td><td class="who">user</td><td class="target mono">domain root</td></tr>
@@ -563,11 +563,11 @@
       <table>
         <thead><tr><th style="width:34%">Finding</th><th style="width:28%">Source</th><th>Target</th></tr></thead>
         <tbody>
-          <tr><td class="finding">Cleartext creds in NETLOGON logon script</td><td class="who">any domain user</td><td class="target">pool account — enumerate</td></tr>
-          <tr><td class="finding">Password stored in a Description field</td><td class="who">any domain user</td><td class="target">pool account — enumerate</td></tr>
+          <tr><td class="finding">Cleartext creds in NETLOGON logon script</td><td class="who">any domain user</td><td class="target">pool account - enumerate</td></tr>
+          <tr><td class="finding">Password stored in a Description field</td><td class="who">any domain user</td><td class="target">pool account - enumerate</td></tr>
           <tr><td class="finding">GPP (Group Policy Preferences) cpassword</td><td class="who">any domain user</td><td class="target mono">local acct. "svc-helpdesk"</td></tr>
-          <tr><td class="finding">LSA secret — cached service credential</td><td class="who">user (local admin on web)</td><td class="target mono">web \ svc-backup</td></tr>
-          <tr><td class="finding">Plaintext password left in a file share dump</td><td class="who">any domain user, <span class="mono">\\sql1\Shared</span></td><td class="target">pool account — enumerate</td></tr>
+          <tr><td class="finding">LSA secret - cached service credential</td><td class="who">user (local admin on web)</td><td class="target mono">web \ svc-backup</td></tr>
+          <tr><td class="finding">Plaintext password left in a file share dump</td><td class="who">any domain user, <span class="mono">\\sql1\Shared</span></td><td class="target">pool account - enumerate</td></tr>
           <tr><td class="finding">Web.config.bak leaks live DB connection string</td><td class="who">unauthenticated, over HTTP</td><td class="target mono">svc-web SQL login</td></tr>
         </tbody>
       </table>
@@ -580,12 +580,12 @@
       <table>
         <thead><tr><th style="width:34%">Finding</th><th style="width:28%">Source</th><th>Target</th></tr></thead>
         <tbody>
-          <tr><td class="finding">ASREPRoast — no Kerberos pre-auth</td><td class="who">unauthenticated</td><td class="target">pool account — enumerate</td></tr>
+          <tr><td class="finding">ASREPRoast - no Kerberos pre-auth</td><td class="who">unauthenticated</td><td class="target">pool account - enumerate</td></tr>
           <tr><td class="finding">Kerberoastable, RC4-only account</td><td class="who">any domain user</td><td class="target mono">crackme</td></tr>
           <tr><td class="finding">Guessable dictionary passwords</td><td class="who">unauthenticated</td><td class="target">10 pool accounts</td></tr>
           <tr><td class="finding">Pre-Windows 2000 default password</td><td class="who">any domain user</td><td class="target mono">computer4</td></tr>
           <tr><td class="finding">Blank password</td><td class="who">any domain user</td><td class="target mono">computer5</td></tr>
-          <tr><td class="finding">ANONYMOUS LOGON — null-session enumeration</td><td class="who">unauthenticated</td><td class="target">full domain user list</td></tr>
+          <tr><td class="finding">ANONYMOUS LOGON - null-session enumeration</td><td class="who">unauthenticated</td><td class="target">full domain user list</td></tr>
           <tr><td class="finding">NetNTLMv1 permitted</td><td class="who">any client on the wire</td><td class="target mono">dc1 &amp; dc2</td></tr>
           <tr><td class="finding">Unrestricted DNS zone transfer (AXFR)</td><td class="who">unauthenticated</td><td class="target mono">dc1</td></tr>
         </tbody>
@@ -595,13 +595,13 @@
 
   <section id="relay">
     <div class="section-head"><h2>NTLM Relay Practice</h2><span class="section-count">2 findings</span></div>
-    <p class="section-note">Two pool accounts each run a scheduled task every 5 minutes trying to reach a made-up hostname with no DNS record — that failure falls through to LLMNR/NBT-NS/mDNS, which is poisonable from the attacker box (see Starter Access above).</p>
+    <p class="section-note">Two pool accounts each run a scheduled task every 5 minutes trying to reach a made-up hostname with no DNS record. That failure falls through to LLMNR/NBT-NS/mDNS, which is poisonable from the attacker box (see Starter Access above).</p>
     <div class="tablewrap">
       <table>
         <thead><tr><th style="width:34%">Finding</th><th style="width:28%">Source</th><th>Target</th></tr></thead>
         <tbody>
-          <tr><td class="finding">WebDAV/HTTP auth on broadcast-resolution fallback</td><td class="who">pool account — enumerate</td><td class="target">relay to LDAP on a DC</td></tr>
-          <tr><td class="finding">SMB auth on broadcast-resolution fallback</td><td class="who">pool account — enumerate, local admin on workstation</td><td class="target mono">relay to workstation</td></tr>
+          <tr><td class="finding">WebDAV/HTTP auth on broadcast-resolution fallback</td><td class="who">pool account - enumerate</td><td class="target">relay to LDAP on a DC</td></tr>
+          <tr><td class="finding">SMB auth on broadcast-resolution fallback</td><td class="who">pool account - enumerate, local admin on workstation</td><td class="target mono">relay to workstation</td></tr>
         </tbody>
       </table>
     </div>
@@ -613,7 +613,7 @@
       <table>
         <thead><tr><th style="width:34%">Finding</th><th style="width:28%">Source</th><th>Target</th></tr></thead>
         <tbody>
-          <tr><td class="finding">Same service account runs both instances</td><td class="who">—</td><td class="target mono">svc-mssql (sql1 &amp; sql2)</td></tr>
+          <tr><td class="finding">Same service account runs both instances</td><td class="who">-</td><td class="target mono">svc-mssql (sql1 &amp; sql2)</td></tr>
           <tr><td class="finding">Windows Auth open to every domain user</td><td class="who">any domain user</td><td class="target mono">sql1</td></tr>
           <tr><td class="finding">Sysadmin impersonation (<span class="mono">EXECUTE AS</span>)</td><td class="who">any domain user, on sql1</td><td class="target">sysadmin context</td></tr>
           <tr><td class="finding">Linked server mapped to sysadmin</td><td class="who">sysadmin on sql1</td><td class="target mono">sql2, via the link</td></tr>
@@ -637,7 +637,7 @@
 
   <section id="adcs">
     <div class="section-head"><h2>Certificate Services (ADCS)</h2><span class="section-count">15 escalation paths</span></div>
-    <p class="section-note">ESC12 needs HSM-protected key material this lab doesn't have, and ESC14 rides on the existing GenericWrite right above — neither gets its own row.</p>
+    <p class="section-note">ESC12 needs HSM-protected key material this lab doesn't have, and ESC14 rides on the existing GenericWrite right above. Neither gets its own row.</p>
     <div class="tablewrap">
       <table>
         <thead><tr><th style="width:12%">ID</th><th style="width:48%">Issue</th><th>Target</th></tr></thead>
@@ -680,11 +680,11 @@
     <div class="notes">
       <ul>
         <li>Every finding above is reachable straight from <span class="mono">user</span>, <span class="mono">computer</span>, or an unauthenticated/any-domain-user starting point. You never need to solve one finding to unlock a different one.</li>
-        <li>The pool of ~1000 user accounts is mostly decoys, and the <em>usernames</em> themselves aren't a secret — they're drawn straight from a public statistically-likely-usernames list, so username enumeration/spraying tools will find real accounts easily. The <em>passwords</em> are what's actually protected: real targets are marked <em>"pool account — enumerate"</em> above and have to be found (LDAP, SMB, etc.), not guessed.</li>
-        <li>The literal password <code>password</code> belongs only to <span class="mono">user</span> and <span class="mono">computer</span> — it will not unlock anything else.</li>
+        <li>The pool of ~1000 user accounts is mostly decoys, and the <em>usernames</em> themselves aren't a secret. They're drawn straight from a public statistically-likely-usernames list, so username enumeration/spraying tools will find real accounts easily. The <em>passwords</em> are what's actually protected: real targets are marked <em>"pool account - enumerate"</em> above and have to be found (LDAP, SMB, etc.), not guessed.</li>
+        <li>The literal password <code>password</code> belongs only to <span class="mono">user</span> and <span class="mono">computer</span>. It will not unlock anything else.</li>
         <li>Machine account quota is unchanged (10), so you can join your own computer account instead of using <span class="mono">computer</span> if you'd rather keep it clean.</li>
         <li>Keep testing scoped to the 7 AD hosts and the <span class="mono">10.0.2.10</span> attacker box (both on <span class="mono">10.0.2.0/24</span>), plus the standalone <span class="mono">10.1.1.1</span> service-abuse host.</li>
-        <li>If something breaks badly — locked account, corrupted AD object, crashed VM — ask course staff for a snapshot rollback rather than trying to repair it yourself.</li>
+        <li>If something breaks badly (locked account, corrupted AD object, crashed VM), ask course staff for a snapshot rollback rather than trying to repair it yourself.</li>
       </ul>
     </div>
   </section>
