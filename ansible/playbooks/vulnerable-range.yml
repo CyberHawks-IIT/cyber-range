@@ -37,3 +37,21 @@
     - ansible.builtin.import_role:
         name: laps
         tasks_from: verify
+
+- name: Phase D - ACL grants (nine rights)
+  hosts: dc1
+  gather_facts: false
+  tags: [acls]
+  tasks:
+    - ansible.builtin.import_role:
+        name: ad_acls
+        tasks_from: grant_main
+
+- name: Phase D - ACL grant (LAPS read, needs LAPS module)
+  hosts: dc2
+  gather_facts: false
+  tags: [acls]
+  tasks:
+    - ansible.builtin.import_role:
+        name: ad_acls
+        tasks_from: grant_laps_read
