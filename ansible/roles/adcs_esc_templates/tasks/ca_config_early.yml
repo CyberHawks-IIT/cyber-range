@@ -1,0 +1,23 @@
+---
+# Runs against ca. Depends on Phase H's create_templates play (dc1) having
+# already run and set hostvars['dc1'].domain_users_sid.
+- name: Upload early CA config script (ESC7, ESC8 confirm, ESC11 -- ESC5 runs on dc1)
+  ansible.windows.win_copy:
+    src: ca_config_early.ps1
+    dest: "C:\\Windows\\Temp\\ca_config_early.ps1"
+
+- name: Apply early CA config (ESC7, ESC8 confirm, ESC11)
+  ansible.windows.win_shell: "C:\\Windows\\Temp\\ca_config_early.ps1"
+  environment:
+    DOMAIN_USERS_SID: "{{ hostvars['dc1'].domain_users_sid }}"
+  register: ca_early_result
+  changed_when: true
+
+- name: Show early CA config result
+  ansible.builtin.debug:
+    var: ca_early_result.stdout_lines
+
+- name: Remove temp script
+  ansible.windows.win_file:
+    path: "C:\\Windows\\Temp\\ca_config_early.ps1"
+    state: absent

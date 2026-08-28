@@ -1,0 +1,20 @@
+---
+# Runs against dc1,dc2.
+- name: Upload DC config script (ESC9 DC-half, ESC10)
+  ansible.windows.win_copy:
+    src: dc_config.ps1
+    dest: "C:\\Windows\\Temp\\dc_config.ps1"
+
+- name: Apply DC config (ESC9 DC-half, ESC10)
+  ansible.windows.win_shell: "C:\\Windows\\Temp\\dc_config.ps1"
+  register: dc_config_result
+  changed_when: "'set' in dc_config_result.stdout"
+
+- name: Show DC config result
+  ansible.builtin.debug:
+    var: dc_config_result.stdout_lines
+
+- name: Remove temp script
+  ansible.windows.win_file:
+    path: "C:\\Windows\\Temp\\dc_config.ps1"
+    state: absent

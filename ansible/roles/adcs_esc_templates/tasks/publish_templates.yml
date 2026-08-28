@@ -1,0 +1,22 @@
+---
+# Runs against ca.
+- name: Upload template publish script
+  ansible.windows.win_copy:
+    src: publish_templates.ps1
+    dest: "C:\\Windows\\Temp\\publish_templates.ps1"
+
+- name: Publish the 8 ESC templates to the CA
+  ansible.windows.win_shell: "C:\\Windows\\Temp\\publish_templates.ps1"
+  environment:
+    ADMIN_PASSWORD: "{{ vault_windows_admin_password }}"
+  register: publish_result
+  changed_when: "'Published' in publish_result.stdout"
+
+- name: Show publish result
+  ansible.builtin.debug:
+    var: publish_result.stdout_lines
+
+- name: Remove temp script
+  ansible.windows.win_file:
+    path: "C:\\Windows\\Temp\\publish_templates.ps1"
+    state: absent

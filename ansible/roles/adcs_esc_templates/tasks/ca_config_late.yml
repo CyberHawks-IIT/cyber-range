@@ -1,0 +1,22 @@
+---
+# Runs against ca -- only after ESC1/ESC9/ESC10 have been independently
+# verified (see the plan). ESC6 and ESC16 are CA-wide and would otherwise
+# mask whether a narrower finding's own setting is what's really working.
+- name: Upload late CA config script (ESC6, ESC16)
+  ansible.windows.win_copy:
+    src: ca_config_late.ps1
+    dest: "C:\\Windows\\Temp\\ca_config_late.ps1"
+
+- name: Apply late CA config (ESC6, ESC16)
+  ansible.windows.win_shell: "C:\\Windows\\Temp\\ca_config_late.ps1"
+  register: ca_late_result
+  changed_when: "'enabled' in ca_late_result.stdout or 'added' in ca_late_result.stdout"
+
+- name: Show late CA config result
+  ansible.builtin.debug:
+    var: ca_late_result.stdout_lines
+
+- name: Remove temp script
+  ansible.windows.win_file:
+    path: "C:\\Windows\\Temp\\ca_config_late.ps1"
+    state: absent

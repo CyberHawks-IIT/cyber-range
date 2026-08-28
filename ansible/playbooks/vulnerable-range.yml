@@ -150,3 +150,51 @@
     - ansible.builtin.import_role:
         name: web_portal
         tasks_from: site_setup
+
+- name: Phase H - Build ESC templates (ESC1,2,3,4,9,13,15,17)
+  hosts: dc1
+  gather_facts: false
+  tags: [adcs]
+  tasks:
+    - ansible.builtin.import_role:
+        name: adcs_esc_templates
+        tasks_from: create_templates
+
+- name: Phase H - Publish ESC templates to the CA
+  hosts: ca
+  gather_facts: false
+  tags: [adcs]
+  tasks:
+    - ansible.builtin.import_role:
+        name: adcs_esc_templates
+        tasks_from: publish_templates
+
+- name: Phase H - Early CA config (ESC5, ESC7, ESC8 confirm, ESC11)
+  hosts: ca
+  gather_facts: false
+  tags: [adcs]
+  tasks:
+    - ansible.builtin.import_role:
+        name: adcs_esc_templates
+        tasks_from: ca_config_early
+
+- name: Phase H - DC config (ESC9 DC-half, ESC10)
+  hosts: dc1,dc2
+  gather_facts: false
+  tags: [adcs]
+  tasks:
+    - ansible.builtin.import_role:
+        name: adcs_esc_templates
+        tasks_from: dc_config
+
+# ca_config_late (ESC6, ESC16) is intentionally a SEPARATE, later tagged
+# play (--tags adcs_late) run only after ESC1/ESC9/ESC10 are independently
+# verified -- see ansible/VULNERABLE_RANGE_PLAN.md.
+- name: Phase H - Late CA config (ESC6, ESC16) - run separately after verification
+  hosts: ca
+  gather_facts: false
+  tags: [adcs_late]
+  tasks:
+    - ansible.builtin.import_role:
+        name: adcs_esc_templates
+        tasks_from: ca_config_late
