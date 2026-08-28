@@ -77,6 +77,12 @@ boxes, web is a web server, workstation is a Win11 client.
 All 7 confirmed `running` in Proxmox as of provisioning time, correct disk sizes
 (sql1/sql2 at 48G, rest at template default 32G).
 
+**Baseline snapshot (2026-08-27):** all 7 shut down cleanly, each given a
+Proxmox snapshot named `initial` ("Baseline snapshot before AD/domain
+configuration"), then restarted. Use `qm rollback <vmid> initial` on any of
+them to reset back to this pre-domain-config state if something goes wrong
+during AD setup later.
+
 Provisioned 2026-08-27 via linked clone (`qm clone`, default linked-clone
 behavior since sources 300/301/302/304 are Proxmox templates) from the Proxmox
 host itself, cloud-init IP set per host above. sql1/sql2 disks resized to 48G
