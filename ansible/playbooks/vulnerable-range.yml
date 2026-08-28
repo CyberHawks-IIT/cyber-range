@@ -1,0 +1,12 @@
+---
+# Builds out the vulnerable CyberHawks AD range per
+# ansible/VULNERABLE_RANGE_PLAN.md. Each phase is its own role, tagged so it
+# can be re-run individually, e.g.:
+#   ansible-playbook playbooks/vulnerable-range.yml --tags base_accounts
+
+- name: Phase B - Foundational AD objects (starter accounts, pool, computers, DNS)
+  hosts: dc1
+  gather_facts: false
+  tags: [base_accounts]
+  roles:
+    - ad_base_accounts

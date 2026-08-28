@@ -1,0 +1,56 @@
+---
+# Runs against dc1 (see playbooks/vulnerable-range.yml) -- all AD writes in
+# this build are pinned to a single DC to avoid replication-timing races.
+
+- name: Generate the 1000-account credential pool (idempotent, local, once)
+  ansible.builtin.command:
+    cmd: >
+      python3 {{ role_path }}/files/generate_pool_accounts.py
+      {{ role_path }}/files/jsmith.txt
+      {{ playbook_dir }}/../generated/pool_accounts.csv
+    creates: "{{ playbook_dir }}/../generated/pool_accounts.csv"
+  delegate_to: localhost
+  run_once: true
+  become: false
+
+- name: Upload starter/computer/DNS setup script to dc1
+  ansible.windows.win_copy:
+    src: setup_starter_and_computers.ps1
+    dest: "C:\\Windows\\Temp\\setup_starter_and_computers.ps1"
+
+- name: Run starter/computer/DNS setup script
+  ansible.windows.win_shell: "C:\\Windows\\Temp\\setup_starter_and_computers.ps1"
+  register: starter_result
+  changed_when: "'Created' in starter_result.stdout"
+
+- name: Show starter/computer/DNS setup output
+  ansible.builtin.debug:
+    var: starter_result.stdout_lines
+
+- name: Upload the pool-account apply script to dc1
+  ansible.windows.win_copy:
+    src: apply_pool_accounts.ps1
+    dest: "C:\\Windows\\Temp\\apply_pool_accounts.ps1"
+
+- name: Upload the pool credential CSV to dc1 (temp location)
+  ansible.windows.win_copy:
+    src: "{{ playbook_dir }}/../generated/pool_accounts.csv"
+    dest: "C:\\Windows\\Temp\\pool_accounts.csv"
+
+- name: Apply the 1000-account pool to AD (idempotent, skips existing accounts)
+  ansible.windows.win_shell: "C:\\Windows\\Temp\\apply_pool_accounts.ps1 -CsvPath 'C:\\Windows\\Temp\\pool_accounts.csv'"
+  register: pool_result
+  changed_when: "'Created: 0,' not in pool_result.stdout"
+
+- name: Show pool creation summary
+  ansible.builtin.debug:
+    var: pool_result.stdout_lines
+
+- name: Remove the plaintext credential CSV and scripts from dc1 (secret hygiene)
+  ansible.windows.win_file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "C:\\Windows\\Temp\\pool_accounts.csv"
+    - "C:\\Windows\\Temp\\apply_pool_accounts.ps1"
+    - "C:\\Windows\\Temp\\setup_starter_and_computers.ps1"

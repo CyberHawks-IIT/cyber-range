@@ -15,13 +15,22 @@ vault_pass.txt
 # locally, if at all -- if you do commit one, encrypt it with `ansible-vault
 # encrypt` first and remove it from this ignore. .example templates are
 # always safe to commit.
-vault.yml
+# (inventory/group_vars/windows_vms/vault.yml is ansible-vault-encrypted and
+# intentionally committed -- the vault password itself lives only in
+# /root/.ansible-secrets/cyberrange_vault_pass on the Kali WSL control node,
+# never in git.)
 !vault.yml.example
 
 # Secrets / local overrides
 secrets.yml
 *.secrets.yml
 .env
+
+# Generated vulnerable-range credentials/assignments (the 1000-account pool,
+# per-account password + role mapping, etc.) -- doubles as a "solutions key"
+# for the lab, must never be committed. README.md documents what lives here.
+ansible/generated/*
+!ansible/generated/README.md
 
 # OS / editor cruft
 .DS_Store
