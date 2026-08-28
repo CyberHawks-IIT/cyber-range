@@ -10,10 +10,11 @@ this file as the running source of truth for project context across sessions.
 
 ## Working conventions
 
-- **Always `git commit` and `git push` after making changes in this repo** —
-  don't batch changes up or wait to be asked. This applies to every change
-  (CLAUDE.md updates, Ansible code, anything else tracked here), not just
-  end-of-session wrap-ups.
+- **Commit locally as you go; use judgment on when to push.** (Updated
+  2026-08-27 — previously this said push after every change, but that turned
+  out to be more than the user wanted.) Code/Ansible changes are a good
+  default trigger to push. Don't feel obligated to push after every small
+  CLAUDE.md tweak or in-progress investigation note.
 
 ## Control host
 
@@ -135,6 +136,43 @@ to include all 7 VM IPs. **Verified 2026-08-27** via authenticated
 `Invoke-Command` (not just port reachability): all 7 VMs now respond correctly,
 including workstation after the fixes below (confirmed hostname `workstation`,
 `Microsoft Windows 11 Pro N`).
+
+**QEMU guest agent (2026-08-27):** all 7 VMs confirmed working
+(`qm agent <vmid> ping` succeeds). dc1/dc2/ca/web/sql1/sql2 already had it via
+their templates. workstation didn't (template 304 never had `agent: 1` set) —
+installed via the `virtio-win.iso` already mounted on it
+(`E:\guest-agent\qemu-ga-x86_64.msi`, silent `msiexec`), then
+`qm set 326 --agent enabled=1` + a full VM restart (this is a hardware change,
+a guest-side reboot isn't enough — confirmed via `qm pending` showing it
+queued until actually restarted).
+
+**Known issue, NOT yet fixed — stale Cloudbase-Init state on template 304:**
+while trying to also fix this at the template level, found that a *fresh*
+clone from template 304 can fail to apply its cloud-init network config
+entirely (silently stays on link-local/no IP — different symptom from the
+earlier 300/302 static-IP bug). Cause: `C:\...\Cloudbase-Init\log\cloudbase-init.log`
+on a fresh clone shows `Plugin 'NetworkConfigPlugin' execution already done,
+skipping` on its very first-ever boot. The registry key
+`HKLM\SOFTWARE\Cloudbase Solutions\Cloudbase-Init\<instance-id>` already exists
+on the template's disk (`base-304-disk-1`) — almost certainly left over from
+whoever originally built the template test-booting it before capture, without
+clearing Cloudbase-Init's execution-state registry key first. Whether a given
+clone hits this depends on whether Proxmox's generated cloud-init `uuid`
+happens to collide with whatever instance-id got baked in (workstation/326
+didn't hit it; a scratch full-clone made later did).
+Separately (and unrelated): the disabled-Administrator issue reproduces on
+every genuinely fresh clone regardless of any template-level SAM edit — Windows'
+own OOBE/specialize pass resets it independently of whatever we set offline
+beforehand. The `chntpw` fix only sticks once applied *after* a machine's own
+first specialize pass has already run (which is why it stuck permanently for
+workstation) — editing the template's pre-specialize disk directly does not
+survive. **Have not yet worked out a durable template-level fix for either of
+these** — likely needs clearing the Cloudbase-Init registry key on the
+template's disk (for the network issue) and rethinking the Administrator fix
+approach given it can't be pre-baked the way Secure Boot / disk resizing can.
+Punted for now at the user's call — not high priority. A scratch VM (970) was
+used to investigate this and has been fully destroyed, disks included; no
+residue left on the Proxmox host.
 
 **workstation (VM 326) hit two separate boot issues, both fixed:**
 
