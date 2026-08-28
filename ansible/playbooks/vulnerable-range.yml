@@ -105,3 +105,30 @@
     - ansible.builtin.import_role:
         name: ad_delegation
         tasks_from: user1_local_admin_web
+
+- name: Phase F - MSSQL AD accounts (svc-mssql, crackme)
+  hosts: dc1
+  gather_facts: false
+  tags: [mssql]
+  tasks:
+    - ansible.builtin.import_role:
+        name: mssql_misconfig
+        tasks_from: ad_accounts
+
+- name: Phase F - MSSQL misconfiguration on sql2 (link target)
+  hosts: sql2
+  gather_facts: false
+  tags: [mssql]
+  tasks:
+    - ansible.builtin.import_role:
+        name: mssql_misconfig
+        tasks_from: sql2
+
+- name: Phase F - MSSQL misconfiguration on sql1
+  hosts: sql1
+  gather_facts: false
+  tags: [mssql]
+  tasks:
+    - ansible.builtin.import_role:
+        name: mssql_misconfig
+        tasks_from: sql1

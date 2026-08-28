@@ -1,0 +1,58 @@
+---
+# Runs against sql1.
+- name: Upload SQL Server firewall rule script to sql1
+  ansible.windows.win_copy:
+    src: open_sql_firewall.ps1
+    dest: "C:\\Windows\\Temp\\open_sql_firewall.ps1"
+
+- name: Open SQL Server port 1433 inbound (not created by default install)
+  ansible.windows.win_shell: "C:\\Windows\\Temp\\open_sql_firewall.ps1"
+  register: fw_result
+  changed_when: "'Created' in fw_result.stdout"
+
+- name: Remove firewall script from sql1
+  ansible.windows.win_file:
+    path: "C:\\Windows\\Temp\\open_sql_firewall.ps1"
+    state: absent
+
+- name: Upload service account change script to sql1
+  ansible.windows.win_copy:
+    src: change_service_account.ps1
+    dest: "C:\\Windows\\Temp\\change_service_account.ps1"
+
+- name: Change sql1's MSSQLSERVER service account to svc-mssql
+  ansible.windows.win_shell: "C:\\Windows\\Temp\\change_service_account.ps1"
+  environment:
+    SVC_MSSQL_PASSWORD: "{{ lookup('ansible.builtin.password', playbook_dir + '/../generated/svc_mssql_password.txt', length=20) }}"
+  register: svc_result
+  changed_when: "'Changed' in svc_result.stdout"
+
+- name: Show service account change result
+  ansible.builtin.debug:
+    var: svc_result.stdout_lines
+
+- name: Remove temp script from sql1
+  ansible.windows.win_file:
+    path: "C:\\Windows\\Temp\\change_service_account.ps1"
+    state: absent
+
+- name: Upload sql1 T-SQL misconfiguration script
+  ansible.windows.win_copy:
+    src: mssql_config_sql1.sql
+    dest: "C:\\Windows\\Temp\\mssql_config_sql1.sql"
+
+- name: Apply sql1 T-SQL misconfiguration
+  ansible.windows.win_shell: >
+    sqlcmd -S localhost -E -v SaPassword="{{ lookup('ansible.builtin.password', playbook_dir + '/../generated/sa_password.txt', length=20, chars=['ascii_letters', 'digits']) }}"
+    -i C:\Windows\Temp\mssql_config_sql1.sql
+  register: sql1_result
+  changed_when: true
+
+- name: Show sql1 T-SQL result
+  ansible.builtin.debug:
+    var: sql1_result.stdout_lines
+
+- name: Remove T-SQL script from sql1
+  ansible.windows.win_file:
+    path: "C:\\Windows\\Temp\\mssql_config_sql1.sql"
+    state: absent

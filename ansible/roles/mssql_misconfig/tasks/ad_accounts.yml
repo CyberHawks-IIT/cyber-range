@@ -1,0 +1,22 @@
+---
+# Runs against dc1.
+- name: Upload MSSQL AD accounts setup script to dc1
+  ansible.windows.win_copy:
+    src: setup_mssql_ad_accounts.ps1
+    dest: "C:\\Windows\\Temp\\setup_mssql_ad_accounts.ps1"
+
+- name: Create svc-mssql and crackme AD accounts
+  ansible.windows.win_shell: "C:\\Windows\\Temp\\setup_mssql_ad_accounts.ps1"
+  environment:
+    SVC_MSSQL_PASSWORD: "{{ lookup('ansible.builtin.password', playbook_dir + '/../generated/svc_mssql_password.txt', length=20) }}"
+  register: mssql_ad_result
+  changed_when: "'Created' in mssql_ad_result.stdout or 'Added SPN' in mssql_ad_result.stdout"
+
+- name: Show MSSQL AD accounts result
+  ansible.builtin.debug:
+    var: mssql_ad_result.stdout_lines
+
+- name: Remove temp script from dc1
+  ansible.windows.win_file:
+    path: "C:\\Windows\\Temp\\setup_mssql_ad_accounts.ps1"
+    state: absent
