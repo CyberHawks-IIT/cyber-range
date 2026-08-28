@@ -1,0 +1,9 @@
+---
+# Runs against dc1,dc2 -- Print Spooler enabled supports the PrinterBug
+# coercion path into web's Unconstrained Delegation (and later ca's ESC8
+# relay chain).
+- name: Ensure Print Spooler is running and set to automatic
+  ansible.windows.win_service:
+    name: Spooler
+    start_mode: auto
+    state: started

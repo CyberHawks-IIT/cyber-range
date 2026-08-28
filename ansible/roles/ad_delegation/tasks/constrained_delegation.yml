@@ -1,0 +1,20 @@
+---
+# Runs against dc1.
+- name: Upload constrained delegation setup script to dc1
+  ansible.windows.win_copy:
+    src: setup_constrained_delegation.ps1
+    dest: "C:\\Windows\\Temp\\setup_constrained_delegation.ps1"
+
+- name: Configure constrained delegation on sql1$ and sql2$
+  ansible.windows.win_shell: "C:\\Windows\\Temp\\setup_constrained_delegation.ps1"
+  register: constrained_result
+  changed_when: "'Set ' in constrained_result.stdout"
+
+- name: Show constrained delegation result
+  ansible.builtin.debug:
+    var: constrained_result.stdout_lines
+
+- name: Remove temp script from dc1
+  ansible.windows.win_file:
+    path: "C:\\Windows\\Temp\\setup_constrained_delegation.ps1"
+    state: absent

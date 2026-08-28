@@ -1,0 +1,28 @@
+---
+# Runs against web -- autologon establishes admin's interactive session at
+# boot, so its TGT lands in LSASS (the passive Unconstrained Delegation
+# capture path).
+- name: Upload admin autologon setup script to web
+  ansible.windows.win_copy:
+    src: setup_admin_autologon.ps1
+    dest: "C:\\Windows\\Temp\\setup_admin_autologon.ps1"
+
+- name: Configure autologon for admin on web
+  ansible.windows.win_shell: "C:\\Windows\\Temp\\setup_admin_autologon.ps1"
+  environment:
+    ADMIN_ACCOUNT_PASSWORD: "{{ lookup('ansible.builtin.password', playbook_dir + '/../generated/admin_account_password.txt', length=20) }}"
+  register: autologon_result
+  changed_when: "'Configured autologon' in autologon_result.stdout"
+
+- name: Show autologon setup result
+  ansible.builtin.debug:
+    var: autologon_result.stdout_lines
+
+- name: Remove temp script from web
+  ansible.windows.win_file:
+    path: "C:\\Windows\\Temp\\setup_admin_autologon.ps1"
+    state: absent
+
+- name: Reboot web to establish admin's autologon session
+  ansible.windows.win_reboot:
+    reboot_timeout: 300

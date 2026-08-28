@@ -1,0 +1,23 @@
+---
+# Runs against dc1: creates the "admin" Domain Admin account and enables
+# Unconstrained Delegation on web$.
+- name: Upload delegation AD setup script to dc1
+  ansible.windows.win_copy:
+    src: setup_delegation_ad.ps1
+    dest: "C:\\Windows\\Temp\\setup_delegation_ad.ps1"
+
+- name: Create/converge admin account, enable Unconstrained Delegation on web
+  ansible.windows.win_shell: "C:\\Windows\\Temp\\setup_delegation_ad.ps1"
+  environment:
+    ADMIN_ACCOUNT_PASSWORD: "{{ lookup('ansible.builtin.password', playbook_dir + '/../generated/admin_account_password.txt', length=20) }}"
+  register: delegation_ad_result
+  changed_when: "'Created' in delegation_ad_result.stdout or 'Enabled' in delegation_ad_result.stdout"
+
+- name: Show delegation AD setup result
+  ansible.builtin.debug:
+    var: delegation_ad_result.stdout_lines
+
+- name: Remove temp script from dc1
+  ansible.windows.win_file:
+    path: "C:\\Windows\\Temp\\setup_delegation_ad.ps1"
+    state: absent

@@ -1,0 +1,32 @@
+---
+# Not a named CLAUDE.md finding -- foundational plumbing the whole design
+# depends on. Vanilla Windows Server ships with the "File and Printer
+# Sharing" firewall rule group (SMB-In among others) disabled by default,
+# which would silently block SMB access to every host in the range
+# (the file share, LSASS/PsExec-style access, NTLM reflection, etc.) even
+# once the intended misconfigurations are all correctly in place. Enabling
+# it is not itself a vulnerability being introduced -- it's what makes the
+# already-designed vulnerabilities actually reachable over the network.
+- name: Enable File and Printer Sharing inbound firewall rules (enables SMB)
+  ansible.windows.win_shell: >
+    Set-NetFirewallRule -DisplayGroup "File and Printer Sharing" -Enabled True
+  register: fw_result
+  changed_when: true
+
+# Same reasoning as the firewall fix above: Windows Defender's real-time
+# protection is on by default and would silently block or flag a large
+# fraction of this lab's intended findings (LSASS/credential dumping, the
+# Phase J LSA-secrets finding, various tool execution) -- not a named
+# finding itself, just what makes the designed ones reachable. Standard
+# practice for intentionally-vulnerable training ranges.
+- name: Disable Windows Defender real-time protection
+  ansible.windows.win_shell: >
+    Set-MpPreference -DisableRealtimeMonitoring $true
+  register: defender_result
+  changed_when: true
+  failed_when: false
+
+- name: Show Defender disable result (non-fatal if Defender isn't present/manageable)
+  ansible.builtin.debug:
+    msg: "{{ defender_result.stderr | default('') }}"
+  when: defender_result.rc | default(0) != 0
