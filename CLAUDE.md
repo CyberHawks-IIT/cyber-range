@@ -58,6 +58,41 @@ committed. This is the key deployed to range hosts for automation access.
     for the Proxmox web UI — consider rotating it if it's not already unique to
     that surface.
 
+### Support/tooling hosts — 192.168.0.0/24, Debian 12, SSH
+
+Separate from the Proxmox-hosted AD range below — these are standalone Debian
+12 (bookworm) boxes on a different subnet (`192.168.0.0/24`), each running one
+dockerized security tool. Reached the same way as the Proxmox host: SSH
+directly (NetBird routes to them, no extra tunnel config).
+
+- **Access:** SSH as `root`, key-only (`id_ed25519_cyberrange`).
+- **Hardening applied 2026-08-27 (all three hosts):** cyberrange-lab pubkey
+  installed to `~/.ssh/authorized_keys`, then `/etc/ssh/sshd_config` changed:
+  - `PermitRootLogin prohibit-password` (root login only via key, never
+    password)
+  - Original config backed up on each host at
+    `/etc/ssh/sshd_config.bak.<timestamp>` before editing.
+  - Verified after restart on each: key login works, password login is
+    rejected.
+  - Unlike the Proxmox host, `PasswordAuthentication` itself was left alone
+    (only `PermitRootLogin` was changed) — non-root password login is still
+    possible in principle, but these boxes are effectively root-only in
+    practice.
+  - The shared root password used to bootstrap key install on all three (out
+    of band with the user, same password reused across all three) no longer
+    works for SSH on any of them post-hardening.
+
+| Name | IP | Tool | Notes |
+|---|---|---|---|
+| sysreptor | 192.168.0.2 | SysReptor (pentest reporting) | Docker Compose in `/root/sysreptor` (official layout: `deploy/{sysreptor,caddy,languagetool}/docker-compose.yml` included from `deploy/docker-compose.yml`). Caddy reverse-proxies the app. Updated to latest (`2026.68`) 2026-08-27 — was already current. **TLS enabled 2026-08-27:** Caddy now serves `https://192.168.0.2/` on 443 with a self-signed cert (`tls internal`, no public domain available on this LAN) and `:80` redirects to it. Caddyfile site block must be pinned to the literal IP (`192.168.0.2:443`, not a bare `:443`) — otherwise Caddy has no hostname to issue an on-demand cert for and bare-IP requests (no SNI) fail TLS handshake. Browser will show an untrusted-cert warning until Caddy's root CA (`docker exec sysreptor-caddy cat /data/caddy/pki/authorities/local/root.crt`) is installed as a trusted root client-side. |
+| nessus | 192.168.0.3 | Tenable Nessus (vuln scanner) | Installed via `.deb` (`nessus` package, `/opt/nessus/`), not managed via apt repo — updates go through `nessuscli update`, not `apt`. Registered on the free **HomeFeed (non-commercial use only)** feed, activation code `AAHP-WEBB-NDU4-WAM9-FEP9`. Updated 2026-08-27: software `10.9.3` → `10.12.4` (build 20038) via `nessuscli update --all` (core-component update required `systemctl stop nessusd` first, then update, then start again — plugins-only updates don't need the service stopped). Plugins confirmed fully compiled/loaded after update by polling `https://127.0.0.1:8834/server/status` until `feed_status`/`db_status`/`engine_status` all report `"ready"` (not just the CLI's "Complete", which only means downloaded — post-update plugin compilation + DB upgrade can take a minute+ after that). |
+| bloodhound | 192.168.0.4 | BloodHound CE (AD attack path analysis) | Docker Compose, 3 containers: `bloodhound-bloodhound-1` (app, port 80→8080), `bloodhound-graph-db-1` (Neo4j 4.4, 127.0.0.1-only), `bloodhound-app-db-1` (Postgres 16). User confirmed already up to date as of 2026-08-27 — not independently verified/updated by Claude. |
+
+Note: none of these three has been given a Proxmox VMID/template mapping here
+since they're plain Debian VMs/hosts outside the `qm`-managed AD range — if
+that changes (e.g. they turn out to also be Proxmox guests), reconcile with
+the Proxmox host's `qm list` and add them to a table like the range VMs below.
+
 ### Range VMs — all Windows, all accessed over WinRM
 
 All are on the Proxmox `ad` bridge, network `10.0.2.0/24`, gateway `10.0.2.1`,
@@ -116,12 +151,14 @@ would not have retroactively updated already-booted guests) **and** in the
 Proxmox cloud-init `--nameserver` config on each VM, so a future re-clone or
 cloud-init reset picks up the same scheme without redoing this by hand.
 
-**Note for when dc1/dc2 are actually promoted to domain controllers with the
-DNS role:** this scheme should be revisited. Standard AD practice is for each
-DC to primary-point at *another* DC (not upstream) for resolution/replication
-health, with the gateway (10.0.2.1) configured as a conditional forwarder
-inside the DNS server role for external names — not as the client-level
-primary resolver like it is now.
+**DNS rebalanced 2026-08-27 after dc1/dc2 were promoted:** now that both run
+the DNS server role, dc1 primaries itself/secondaries dc2 and vice versa; the
+5 members keep the same primary/secondary DC split as before, just no longer
+pointing at the gateway at all. Applied in-guest via `Set-DnsClientServerAddress`
+only (not re-applied to the Proxmox cloud-init config this time — a re-clone
+from these VMs isn't expected, unlike the templates). The gateway is not
+configured as a conditional forwarder inside the DNS role — out of scope for
+now, external resolution from the range hosts hasn't been needed.
 
 **Access:** WinRM, user `Administrator`. Credentials are inherited from the
 Proxmox cloud-init templates (300-304) — same password across all clones since
@@ -291,6 +328,236 @@ investigating the cloudbase-init config/logs on those two templates directly
 (`C:\Program Files\Cloudbase Solutions\Cloudbase-Init\log\` inside the guest)
 to find and fix the root cause rather than patching every future clone by hand.
 
+## Domain build (2026-08-27) — cyberhawks.lab is live
+
+The AD forest/domain, CA, and SQL Server instances described in the design
+below are now actually built (this section is the "what happened", the
+section below is the still-relevant "what's planned on top of it").
+
+**Method note:** WSL2/Ansible still isn't set up (see Open items), so this was
+all done directly via WinRM/PowerShell remoting from the control host rather
+than Ansible playbooks — a deliberate deviation from the repo's stated
+convention, agreed with the user given Ansible wasn't available yet. Worth
+revisiting once WSL2+Ansible lands: consider writing idempotent playbooks that
+capture this same end state, both for reproducibility and to replace ad-hoc
+`Invoke-Command` calls with something version-controlled.
+
+**Hostnames set** (open item #3, done): dc1, web, sql1, sql2 needed
+`Rename-Computer` (were still `WIN-XXXXXXX`) — dc2, ca, workstation had
+already picked up their correct names from cloud-init on first boot.
+
+**dc1 promoted first** as the forest root (`Install-ADDSForest`,
+`cyberhawks.lab` / NetBIOS `CYBERHAWKS`, domain+forest mode Windows2016 to
+match dc1's OS). **dc2 promoted second** as an additional DC
+(`Install-ADDSDomainController`) once dc1's DNS was confirmed self-resolving.
+Both DCs verified healthy via `repadmin /showrepl` and `dcdiag` (all NCs
+replicating, KnowsOfRoleHolders/RidManager/Replications tests passing).
+
+**ca** got AD CS: Enterprise Root CA (`cyberhawks-CA`, 2048-bit, SHA256,
+10-year validity) + Web Enrollment (IIS `certsrv` pages), confirmed serving
+`http://ca.cyberhawks.lab/certsrv/` (200 OK) and CRL publishing cleanly to AD.
+
+**sql1** (Windows Server 2016) got SQL Server **2016 SP2** (Database Engine
+only, mixed-mode/SQL auth enabled) + **SSMS 22**. **sql2** (Windows Server
+2022) got SQL Server **2022** + SSMS 22, same pattern — OS-matched per the
+original ask. Both installed via the free Evaluation-edition ISOs (Microsoft's
+SSEI downloader stubs), engine service account `NT AUTHORITY\SYSTEM`,
+sysadmin granted to both `BUILTIN\Administrators` and
+`CYBERHAWKS\Administrator`. The `sa`/mixed-mode password was set to the same
+value as the shared local Administrator password (see the "Access" note
+above for how to retrieve it) — not a real-world practice, but fine for a lab
+where that password is already the shared credential everywhere else.
+
+**ca, web, sql1, sql2, workstation** all domain-joined (`Add-Computer`).
+
+**Gotchas hit and worked around, worth remembering for future WinRM-driven
+config on this range:**
+
+- **WinRM double-hop / NTLM delegation.** This control host isn't
+  domain-joined, so all WinRM auth to range VMs is NTLM (Kerberos needs an
+  SPN, which needs a domain-joined client). NTLM tokens aren't delegatable,
+  so anything that needs the *target machine* to make its own further
+  authenticated call — `dcdiag`'s cross-DC RPC binds, `Install-
+  AdcsCertificationAuthority`'s LDAP writes to AD — fails with cryptic errors
+  (`ERROR_NOT_AUTHENTICATED`, `ERROR_DS_RANGE_CONSTRAINT`) that look like
+  permissions or config problems but aren't. Fix used throughout: don't rely
+  on the WinRM session's own token for these steps — either pass explicit
+  `/u`/`/p` credentials to the tool if it supports that (`dcdiag`), or, for
+  cmdlets that don't, wrap the command in a one-shot Scheduled Task
+  (`schtasks /Create /RU <domain admin> /RP <password> /RL HIGHEST`) so it
+  runs under a real password-based logon with full network credentials, then
+  delete the task. No CredSSP config needed.
+- **`Start-Process -ArgumentList` doesn't quote array elements containing
+  spaces.** `/SQLSVCACCOUNT=NT AUTHORITY\SYSTEM` as one array element gets
+  split into two raw tokens by the child process's own command-line parser,
+  silently corrupting the argument (surfaced as a deeply-nested
+  `ArgumentNullException` in SQL Server's own setup logs, not an obvious
+  quoting error). Fix: build one pre-quoted argument **string** instead of an
+  array when any value contains a space or backslash-space.
+- **A killed/interrupted SQL Server setup can leave a stale "reboot
+  pending" flag** (`HKLM\...\Component Based Servicing\RebootPending`) that
+  causes the *next* setup attempt to hang indefinitely with 0% CPU (not
+  crash, not timeout — just stall forever, easy to mistake for "still
+  working" if you don't check CPU-over-time). Fix: reboot the VM before
+  retrying if a previous attempt was killed rather than left to finish/fail
+  on its own.
+- **SSMS 22's installer (`vs_SSMS.exe`, a Visual Studio Installer bootstrapper)
+  requires .NET Framework 4.7.2+.** Windows Server 2022 ships with this
+  already; Windows Server 2016 doesn't (ships with 4.6.2) and needs it
+  installed separately first (`ndp48-web.exe` from
+  `go.microsoft.com/fwlink/?LinkId=2085155`, silent `/q /norestart`, then
+  reboot). Failure mode without it: instant exit code 16384, easy to mistake
+  for a transient/retry-able failure since it fails in under a second.
+- **SSMS 22's install is genuinely large** (~150+ components — it pulls in
+  much of the VS Community shell, not just SSMS itself) and runs under a
+  process named `setup`/background installer, not `vs_SSMS.exe` — don't
+  mistake the outer bootstrapper exiting quickly for the real work being
+  done; check for live `setup` process CPU growth or the component logs in
+  `%TEMP%\dd_setup_*.log` instead of trusting the launching process's own
+  exit code or lifetime.
+- A WinRM session that drops mid-command (e.g. from a reboot on the far end,
+  or a network blip) kills whatever it was running inline, even long
+  unattended installs — don't run multi-minute operations directly inside
+  `Invoke-Command -Wait`; use the Scheduled Task pattern above so the work
+  survives a dropped session and can be polled for completion independently.
+
+## Vulnerable AD range design (planned)
+
+Design for the intentionally-vulnerable configuration to build once dc1/dc2 are
+promoted and the domain exists. Goal: cover every Kerberos delegation attack
+variation, plus a broad spread of other common AD/web/SQL misconfigurations,
+each appearing exactly once (no two hosts/accounts implementing the same
+delegation type) and reachable from a minimal, fixed, student-issued set of
+credentials (`user1`, `computer1`) or from local admin gained via another
+step — never requiring an undocumented starting foothold. Starter accounts are
+kept to the minimum needed to represent each *source type* once (one starter
+user, one starter computer); a single starter account is loaded with every
+right/foothold whose *targets* don't collide with each other — stacking
+non-overlapping attacks onto one account isn't itself an overlap.
+
+**No chained attacks:** every finding must be directly exploitable starting
+from user1, computer1, or "any domain user," in one continuous exploitation of
+*that single finding* — never by first fully solving a separate, independently-
+listed finding elsewhere in this document to obtain a credential this one then
+depends on. The one documented exception: if a starter credential is a local
+admin on some host (currently just user1 on web), that host's local context —
+its LSASS secrets, its own machine account, anything reachable from being an
+admin on it — counts as available from day one too, since that's functionally
+the same as having been handed access to it directly. A vulnerability whose
+own exploitation is naturally multi-step (e.g. impersonate sysadmin → get a
+shell → dump a credential you then immediately use) is fine — that's one
+finding's exploit chain, not a dependency on a *different* finding.
+
+**Standing convention:** whenever a bullet below references "a user" / "a
+different user" / "another user" without naming a specific one, it means: pick
+a username from the 1000-account pool (usernames drawn from
+[jsmith.txt](https://github.com/insidetrust/statistically-likely-usernames/blob/master/jsmith.txt),
+random 14-character passwords) that has **not already been assigned to a role
+elsewhere in this list**. Track assignments in the table below so the same
+pool account is never reused for two purposes. This keeps each scenario's
+target genuinely unknown to students until they enumerate for it, rather than
+collapsing multiple findings onto one guessable account.
+
+**Starter access — the only accounts students are handed on day one:**
+
+| Account | Password | Notes |
+|---|---|---|
+| user1 | `password` | a local admin on web from first boot (Unconstrained Delegation entry point), and the sole holder of every ACL-abuse right below: WriteDacl, GenericWrite, WriteProperty(KeyCredentialLink), WriteProperty(msDS-AllowedToActOnBehalfOfOtherIdentity), GenericAll on the Default Domain Policy GPO, Self on Domain Admins, ForceChangePassword, DCSync, WriteOwner, and read rights on sql2's LAPS password — one account, ten rights, because each targets a different object and none of the resulting attacks collide |
+| computer1 | `password` | the one starter *computer* account, representing that source category on its own — used as the RBCD delegation identity written into computer2's msDS-AllowedToActOnBehalfOfOtherIdentity (atypical for a real machine account, which would normally have a ~120-char random secret — set to `password` deliberately so it's an obvious, memorable "starter kit" credential) |
+
+Earlier drafts of this design also handed out user2-user4 as filler accounts;
+they're dropped — nothing in the list below needs a second starter user, and
+every one of user1's nine rights already lands on a distinct target, so a
+second account would add headcount without adding coverage.
+
+`password` (lowercase, no quotes) is reserved **exclusively** for these two
+accounts — every other password-generation step below (the 1000-account pool,
+the 10 weak-cred accounts, the Description-field password, etc.) must exclude
+that literal string so it can't accidentally double as a hint. Every attack
+*target* in this design — `poolUser_*` accounts, computer2, computer3, `admin`,
+sql1$/sql2$, svc-mssql, crackme, and anything reachable via the ESC templates —
+is deliberately **not** one of these two; students always pull the attack off
+*from* user1 or computer1 (or from "any domain user"/anonymous access, for the
+handful of misconfigurations open enough not to need a named starter account
+at all — MSSQL Windows-Auth login, the null-session enumeration, Kerberoasting
+crackme, and the ASREPRoast account), never starting *with* the target.
+
+| Placeholder | Role | Assigned real username |
+|---|---|---|
+| `poolUser_writedacl_target` | target of user1's WriteDacl | *(TBD at provisioning)* |
+| `poolUser_genericwrite_target` | target of user1's GenericWrite | *(TBD)* |
+| `poolUser_forcechangepw_target` | target of user1's ForceChangePassword | *(TBD)* |
+| `poolUser_writeowner_target` | target of user1's WriteOwner | *(TBD)* |
+| `poolUser_netlogon_creds` | account whose cleartext creds sit in the NETLOGON script | *(TBD)* |
+| `poolUser_desc_field_pw` | account with its own password in its Description field | *(TBD)* |
+| `poolUser_asreproast` | account with no pre-auth required, password `princess` | *(TBD)* |
+| `poolUser_weakcreds_1` .. `poolUser_weakcreds_10` | the 10 accounts with guessable creds (`Summer2026`, `Password1`, etc.) | *(TBD)* |
+| `poolUser_smbshare_creds` | account whose plaintext password sits in a file on the `\\sql1\Shared` company file dump | *(TBD)* |
+
+Full misconfiguration list:
+
+- same local Administrator password on dc1, dc2, web, sql1, and workstation, which is also the password for the Administrator domain account: S@lcianaszkot23 — ca and sql2 are the exception, see LAPS below
+- LAPS is deployed on ca and sql2 (the subset of hosts left out of the shared password above), each with its own unique, rotated local Administrator password — sql2's LAPS password-attribute ACL is misconfigured to additionally grant user1 read rights (a 10th right for user1, alongside the nine below; its target — local admin on sql2 via the LAPS password — doesn't overlap any of them, or WebClient/NTLM reflection on workstation, or the svc-mssql-reuse route into sql2 from sql1, though it does offer a faster alternate path onto sql2 for anyone who spots the ACL first — intentional, same convergence pattern as the two ways into web's Unconstrained Delegation). This is also user1's *direct* (non-chained) route onto sql2 for the delegation scenario below — no need to have gone through sql1 first.
+- ANONYMOUS LOGON in Windows Pre-2000 Compatible access group to allow SMB null session user enumeration
+- MSSQL on sql1 and sql2 are being run with the same domain account (svc-mssql)
+- MSSQL on sql1 configured so all **domain** users can log in (Windows Authentication / Integrated Security — not SQL auth), which also means real Kerberos service tickets to sql1's SPN are generated naturally by normal use, satisfying the delegation scenario below without any extra scaffolding
+- MSSQL on sql1 configured so anyone can impersonate a sysadmin
+- sql1's computer account (sql1$) has Constrained Delegation configured *without* protocol transition (`msDS-AllowedToDelegateTo` set, `TRUSTED_TO_AUTH_FOR_DELEGATION` not set), targeting CIFS on dc1 — directly reachable by any domain user in one continuous exploitation of the sysadmin-impersonation bug above (impersonate sysadmin → xp_cmdshell as svc-mssql/SYSTEM → dump sql1$'s credentials, all in the same session, no separate finding required); the domain-user Windows-Auth logons to sql1 above supply the real Kerberos ticket S4U2Self needs to replay
+- sql1 linked to sql2 and through the link you can execute commands as sysadmin — reached the same direct way, as part of exploiting sql1 itself, not a separate prerequisite
+- sql2's computer account (sql2$) has Constrained Delegation configured *with* protocol transition (T2A4D: `msDS-AllowedToDelegateTo` + `TRUSTED_TO_AUTH_FOR_DELEGATION`), targeting CIFS on dc1 — reached directly via user1's LAPS-granted local admin on sql2 above (dump sql2$'s machine credentials, then S4U2Self+S4U2Proxy), with no need to have touched sql1 first; since the allow-list only names CIFS/dc1, this also teaches the alternate-service sname-substitution trick to pull an LDAP ticket instead and DCSync
+- 1000 users with usernames from [jsmith.txt](https://github.com/insidetrust/statistically-likely-usernames/blob/master/jsmith.txt), initialized with random 14 character passwords (excluding the literal string `password`, per the starter-access note above)
+- user1 and computer1 with password `password` — the only two starter accounts, see table above
+- user1 has WriteDacl on `poolUser_writedacl_target`, GenericWrite on `poolUser_genericwrite_target`, WriteProperty KeyCredentialLink on computer3, WriteProperty msDS-AllowedToActOnBehalfOfOtherIdentity on computer2, GenericAll on the "Default Domain Policy" GPO, Self on the "Domain Admins" group, ForceChangePassword on `poolUser_forcechangepw_target`, DCSync on the domain, WriteOwner on `poolUser_writeowner_target`, and read rights on sql2's LAPS password (see above) — ten rights, ten non-overlapping targets, none of them a starter account; computer1 (not itself targeted by anything) is the pre-provisioned source used to complete the RBCD write on computer2
+- default `ms-DS-MachineAccountQuota` (10) is left unchanged, so students who'd rather self-create a computer account than use computer1 for the RBCD chain above can still do so
+- Domain Admin "admin" auto starts on boot an active session on web (maybe through a script?) — `admin` is not a starter account; reaching it requires the local-admin foothold below
+- user1 is a local admin on web from first boot (starter access, not something to be earned)
+- web's computer account has Unconstrained Delegation enabled — combined with the two bullets above, this is the classic passive-capture Unconstrained Delegation scenario (dump LSASS as user1 for admin's cached TGT)
+- Print Spooler service left enabled on dc1 and dc2 (PrinterBug coercion) — gives an active alternate path into the same web Unconstrained Delegation target (coerce a DC to authenticate to web instead of waiting for admin's session), and doubles as the coercion primitive for the ca ESC8 relay chain below
+- NetNTLMv1 auth used by domain controllers
+- WebClient service auto-triggered or auto started on boot on workstation — workstation is deliberately **not** a host with starter local admin (only web is), so this is a genuine zero-creds coercion trigger rather than something redundant with an existing foothold
+- workstation is vulnerable to NTLM reflection (the WebClient trigger above coerces workstation's own machine account to authenticate; that authentication is relayed back to a service on workstation itself for local SYSTEM) — also placed on a host without starter local admin, for the same reason as WebClient above; no starter credential is needed at all, only network reachability to workstation
+- `poolUser_desc_field_pw`'s own 14-character password is listed in its "Description" property like `Password: <password>`
+- PowerShell script in the NETLOGON share on domain controllers contains cleartext creds for `poolUser_netlogon_creds`
+- cleartext scheduled task or service creds stored in LSA secrets on web
+- `poolUser_weakcreds_1` through `poolUser_weakcreds_10` have easily guessable creds: Summer2026, Password1, or similar
+- computer4 is a stale, never-actually-joined computer account still set to its default pre-Windows-2000 password (lowercase of its own account name) — discoverable via ordinary computer-object enumeration, so it needs no starter account, just "any domain user" as the source
+- computer5 is a stale computer account left with a blank password — same story as computer4, same low-bar source, but a distinct target so the two findings don't overlap
+- computer1 through computer5 don't correspond to real VMs, but each still gets a static IP in `10.0.2.0/24` with matching forward (A) and reverse (PTR) DNS records on dc1/dc2, so a reverse lookup on any of them resolves like a real host — since there's no real machine to dynamically self-register, these records have to be created by hand rather than left to AD's usual dynamic DNS update on domain join:
+
+  | Account | IP |
+  |---|---|
+  | computer1 (starter) | 10.0.2.51 |
+  | computer2 (RBCD target) | 10.0.2.52 |
+  | computer3 (Shadow Credentials target) | 10.0.2.53 |
+  | computer4 (pre2k default password) | 10.0.2.54 |
+  | computer5 (blank password) | 10.0.2.55 |
+
+  Deliberately parked at `.51`-`.55`, clear of the real VMs' `.2`-`.8` block and
+  with headroom before it, so adding more real hosts later can't collide.
+- for every template ESC vulnerability in ADCS up to ESC17, there is an affected template named ESC#Template
+- ca is affected by ESC8 and ESC11
+- crackme is a service account supporting RC4 encryption with password iloveyou
+- `poolUser_asreproast` does not require pre-auth and has password princess
+- password for something stored in Group Policy Preferences - make that password actually used for something also
+- **in-universe company theme:** the domain represents "CyberHawks," styled after Illinois Tech's CyberHawks (the group this lab is built for) — gives a natural excuse for HR, IT, Scans, Finance, and Engineering content below, and for the internal portal the website represents
+- develop a simple website (an internal "CyberHawks Employee Portal") to be hosted on web that pulls data from sql1
+- the site hosted on web should require login, with creds being validated against the sql1 database
+- sql1 database used by web is readable by all domain users, and the admin account for the site has password abc123 (can be hashed)
+- the site's actual IIS files on web include a `Web.config.bak` left behind from a manual edit, sitting alongside the live `Web.config` in the site root — IIS's built-in handler blocks direct requests for `Web.config` itself, but not for the `.bak` copy, so it's retrievable over HTTP. It contains the real connection string the site uses to reach sql1, including a plaintext password for a dedicated SQL login (`websvc`) — a distinct credential from the site's own app-level admin login (abc123) above, so the two don't overlap even though both end at sql1
+- an SMB share (`\\sql1\Shared`) hosts a large, disorganized dump of CyberHawks' general company files — a few hundred files across ~50-60 folders, mixing obviously-relevant top-level folders (HR, IT, Scans, Finance, Engineering, per-employee Users\ folders, plus a messy Archive\/"old stuff" catch-all) with realistic-looking but empty filler documents (invoices, review templates, scanned forms, budget spreadsheets, ticket exports). One file under `IT\PasswordResets\` records a plaintext password for `poolUser_smbshare_creds` — a target distinct from every other credential-leak target in this list (NETLOGON script, Description field, GPP, Web.config.bak above), so finding it takes actually reading through the noise rather than checking one obvious spot
+- Cross-domain/cross-forest delegation abuse is intentionally out of scope — cyberhawks.lab is a single domain with no trusts configured
+
+**Delegation coverage recap (each type appears exactly once):**
+
+| Variation | Host/account | Entry vector |
+|---|---|---|
+| Unconstrained (passive + coerced) | web | user1 local admin; PetitPotam/PrinterBug against dc1/dc2 |
+| Constrained, no protocol transition | sql1$ | any domain user, via sql1's sysadmin-impersonation bug |
+| Constrained, protocol transition (T2A4D) + sname substitution | sql2$ | user1's LAPS-granted local admin on sql2 |
+| RBCD via direct ACL write | computer2 (delegation source: computer1) | user1's granted rights |
+| Shadow Credentials | computer3 | user1's granted rights |
+| Cross-domain | — | explicitly excluded (single domain) |
+
 ## Repo layout
 
 ```
@@ -308,21 +575,28 @@ cyber-range/
 ## Open items / next steps
 
 1. Confirm WSL2 finished installing (user needs to run `wsl --install` elevated
-   + reboot if not already done) and install Ansible inside it.
-2. `workstation` (VM 326) is not reachable over WinRM and has no QEMU guest
-   agent configured (template 304 lacks `agent: 1`), so it can't be diagnosed
-   via `qm guest exec` like the others. User has flagged this looks like a
-   different issue from the 300/302 static-IP bug and wants to diagnose it
-   together — parked for now, not blocking the rest of the range.
-3. Set proper hostnames on all 7 VMs (currently all still show Windows
-   autogenerated `WIN-XXXXXXX` names) via `Rename-Computer` over WinRM, then
-   reboot each.
+   + reboot if not already done) and install Ansible inside it. Still not done
+   as of 2026-08-27 (confirmed absent this session) — the domain/CA/SQL build
+   below was done via direct WinRM/PowerShell instead of waiting on this.
+2. ~~`workstation` (VM 326) is not reachable over WinRM~~ — resolved, was
+   fixed in an earlier session (Secure Boot + disabled-Administrator fixes);
+   workstation has been reachable and used over WinRM throughout this
+   session's domain build.
+3. ~~Set proper hostnames on all 7 VMs~~ — done 2026-08-27, see Domain build
+   section below.
 4. Root-cause the cloudbase-init static-IP bug on templates 300/302 (see Known
    issue above) so future clones from them don't need manual `netsh` fixes.
 5. Build out the Ansible inventory (`ansible/inventory/`) with the 7 VMs and
-   start writing playbooks for the vulnerable configurations the range should
-   exercise. Ansible's `winrm` connection plugin will need `pywinrm` installed
-   in the WSL2 environment.
+   start writing playbooks — now retroactively, to capture the domain/CA/SQL
+   build below in a reproducible form — plus the vulnerable configurations
+   the range should exercise. Ansible's `winrm` connection plugin will need
+   `pywinrm` installed in the WSL2 environment.
+6. The "Vulnerable AD range design" section below is still entirely
+   unimplemented — dc1/dc2/ca/sql1/sql2 are up with the base
+   roles/software installed, but none of the intentional
+   misconfigurations, starter accounts, delegation setups, ESC-vulnerable
+   templates, the CyberHawks Employee Portal website, or the SMB file dump
+   have been built yet.
 
 ## GitHub
 
