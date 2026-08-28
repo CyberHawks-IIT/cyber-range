@@ -205,3 +205,30 @@
   tags: [smb_dump]
   roles:
     - smb_file_dump
+
+- name: Phase J - Misc findings on dc1 (NETLOGON, anonymous logon, computer4/5, svc-backup, GPP)
+  hosts: dc1
+  gather_facts: false
+  tags: [misc_findings]
+  tasks:
+    - ansible.builtin.import_role:
+        name: ad_misc_findings
+        tasks_from: dc1_findings
+
+- name: Phase J - NetNTLMv1 on domain controllers
+  hosts: dc1,dc2
+  gather_facts: false
+  tags: [misc_findings]
+  tasks:
+    - ansible.builtin.import_role:
+        name: ad_misc_findings
+        tasks_from: netntlmv1
+
+- name: Phase J - LSA secret scheduled task on web
+  hosts: web
+  gather_facts: false
+  tags: [misc_findings]
+  tasks:
+    - ansible.builtin.import_role:
+        name: ad_misc_findings
+        tasks_from: web_lsa_secret

@@ -1,0 +1,20 @@
+---
+# Runs against dc1,dc2.
+- name: Upload NetNTLMv1 script
+  ansible.windows.win_copy:
+    src: netntlmv1.ps1
+    dest: "C:\\Windows\\Temp\\netntlmv1.ps1"
+
+- name: Enable NetNTLMv1
+  ansible.windows.win_shell: "C:\\Windows\\Temp\\netntlmv1.ps1"
+  register: ntlmv1_result
+  changed_when: "'Set' in ntlmv1_result.stdout"
+
+- name: Show NetNTLMv1 result
+  ansible.builtin.debug:
+    var: ntlmv1_result.stdout_lines
+
+- name: Remove temp script
+  ansible.windows.win_file:
+    path: "C:\\Windows\\Temp\\netntlmv1.ps1"
+    state: absent

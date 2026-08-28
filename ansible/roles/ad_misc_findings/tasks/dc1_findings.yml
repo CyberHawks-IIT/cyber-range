@@ -1,0 +1,88 @@
+---
+# Runs against dc1.
+- name: Extract the netlogon-creds pool account from the generated CSV
+  ansible.builtin.set_fact:
+    netlogon_match: "{{ lookup('file', playbook_dir + '/../generated/pool_accounts.csv') | regex_search('(?m)^([^,]+),([^,]+),netlogon_creds\\r?$', '\\1', '\\2') }}"
+
+- name: Upload NETLOGON script build script
+  ansible.windows.win_copy:
+    src: netlogon_script.ps1
+    dest: "C:\\Windows\\Temp\\netlogon_script.ps1"
+
+- name: Create the NETLOGON script with cleartext creds
+  ansible.windows.win_shell: "C:\\Windows\\Temp\\netlogon_script.ps1"
+  environment:
+    NETLOGON_USERNAME: "{{ netlogon_match[0] }}"
+    NETLOGON_PASSWORD: "{{ netlogon_match[1] }}"
+  register: netlogon_result
+  changed_when: "'Created' in netlogon_result.stdout"
+
+- name: Show NETLOGON script result
+  ansible.builtin.debug:
+    var: netlogon_result.stdout_lines
+
+- name: Remove temp script
+  ansible.windows.win_file:
+    path: "C:\\Windows\\Temp\\netlogon_script.ps1"
+    state: absent
+
+- name: Upload AD-side findings script (anonymous logon, computer4/5)
+  ansible.windows.win_copy:
+    src: ad_side_findings.ps1
+    dest: "C:\\Windows\\Temp\\ad_side_findings.ps1"
+
+- name: Apply AD-side findings (anonymous logon, computer4/5 passwords)
+  ansible.windows.win_shell: "C:\\Windows\\Temp\\ad_side_findings.ps1"
+  register: ad_side_result
+  changed_when: true
+
+- name: Show AD-side findings result
+  ansible.builtin.debug:
+    var: ad_side_result.stdout_lines
+
+- name: Remove temp script
+  ansible.windows.win_file:
+    path: "C:\\Windows\\Temp\\ad_side_findings.ps1"
+    state: absent
+
+- name: Upload svc-backup account setup script
+  ansible.windows.win_copy:
+    src: setup_svc_backup_account.ps1
+    dest: "C:\\Windows\\Temp\\setup_svc_backup_account.ps1"
+
+- name: Create/converge svc-backup account
+  ansible.windows.win_shell: "C:\\Windows\\Temp\\setup_svc_backup_account.ps1"
+  environment:
+    SVC_BACKUP_PASSWORD: "{{ lookup('ansible.builtin.password', playbook_dir + '/../generated/svc_backup_password.txt', length=20) }}"
+  register: svc_backup_result
+  changed_when: "'Created' in svc_backup_result.stdout"
+
+- name: Show svc-backup account result
+  ansible.builtin.debug:
+    var: svc_backup_result.stdout_lines
+
+- name: Remove temp script
+  ansible.windows.win_file:
+    path: "C:\\Windows\\Temp\\setup_svc_backup_account.ps1"
+    state: absent
+
+- name: Upload GPP password script
+  ansible.windows.win_copy:
+    src: gpp_password.ps1
+    dest: "C:\\Windows\\Temp\\gpp_password.ps1"
+
+- name: Apply GPP password finding
+  ansible.windows.win_shell: "C:\\Windows\\Temp\\gpp_password.ps1"
+  environment:
+    GPP_PASSWORD: "{{ lookup('ansible.builtin.password', playbook_dir + '/../generated/gpp_local_admin_password.txt', length=16, chars=['ascii_letters', 'digits']) }}"
+  register: gpp_result
+  changed_when: "'Created' in gpp_result.stdout or 'Wrote' in gpp_result.stdout or 'Moved' in gpp_result.stdout or 'Linked' in gpp_result.stdout"
+
+- name: Show GPP password result
+  ansible.builtin.debug:
+    var: gpp_result.stdout_lines
+
+- name: Remove temp script
+  ansible.windows.win_file:
+    path: "C:\\Windows\\Temp\\gpp_password.ps1"
+    state: absent
