@@ -582,6 +582,9 @@ the new "Relay/poisoning attacker box" section below) and unrestricted DNS
 zone transfer on dc1. All three were built via Ansible (`ntlm_relay_triggers`
 and `dns_zone_transfer` roles, Phases N and O) and independently live-tested
 end-to-end from the new attacker box at 10.0.2.10, not just config-verified.
+That box (VMID 350, an LXC container, not one of the 7 range VMs) was also
+snapshotted (`attacker-tools-v1`) once its tooling was installed and
+verified — see the "Relay/poisoning attacker box" section below.
 
 ### Design rules
 
@@ -738,14 +741,16 @@ Per rule 6 above — the real usernames get filled in at provisioning time.
 
 ### Relay/poisoning attacker box — 10.0.2.10
 
-A dedicated Debian 12 LXC container on the same `10.0.2.0/24` subnet as the
-range (not one of the 7 numbered VMs above), purpose-built for the NTLM
-relay findings — LLMNR/NBT-NS/mDNS are only exploitable if something on the
-subnet is actually listening for the poisoned broadcast, and this box is
-that something. **Access:** SSH, key-only (student/course-staff key pushed
-to `~/.ssh/authorized_keys`; originally bootstrapped with a `test:test`
-password login, which still works as a fallback). Installed and verified
-working end-to-end 2026-08-28:
+A dedicated Debian 12 LXC container (Proxmox VMID **350**, hostname `test`)
+on the same `10.0.2.0/24` subnet as the range (not one of the 7 numbered
+VMs above), purpose-built for the NTLM relay findings — LLMNR/NBT-NS/mDNS
+are only exploitable if something on the subnet is actually listening for
+the poisoned broadcast, and this box is that something. **Access:** SSH,
+`test`/`test` — this is the actual student-facing credential (also usable
+via the Proxmox console if SSH is ever unreachable); this control host's
+own automation key was additionally pushed to `~/.ssh/authorized_keys` for
+unattended setup, but the password login is the intended/documented path,
+not a fallback. Installed and verified working end-to-end 2026-08-28:
 
 | Tool | Install method | Location |
 |---|---|---|
@@ -765,6 +770,11 @@ IPv6 preferred over IPv4 — including both relay triggers above, since
 Windows prefers a poisoned IPv6 answer over IPv4 when both arrive. Disabling
 IPv6 system-wide (including `lo`) makes the probe fail cleanly, so Responder
 correctly falls back to IPv4-only answers.
+
+**Snapshot:** `pct snapshot 350 attacker-tools-v1` taken 2026-08-28 (live,
+container wasn't stopped first — nothing stateful running on it at the
+time) once all four tools were installed and verified. `pct rollback 350
+attacker-tools-v1` restores it.
 
 Both relay paths were independently verified live from this box:
 Responder poisoned the broadcast queries while `ntlmrelayx.py` (with
