@@ -2,7 +2,7 @@ $ErrorActionPreference = "Stop"
 Import-Module ActiveDirectory
 Import-Module DnsServer
 
-# Several literal passwords required by the design (user1/computer1's
+# Several literal passwords required by the design (user/computer$'s
 # "password", the ASREPRoast account's "princess", the crackme account's
 # "iloveyou") are single-case dictionary words that fail AD's default
 # complexity policy. Weak/guessable passwords are the entire point of this
@@ -16,6 +16,43 @@ if ($currentPolicy.ComplexityEnabled) {
     Write-Output "Disabled domain password complexity policy"
 } else {
     Write-Output "Domain password complexity policy already disabled"
+}
+
+# One-time migration: earlier builds used user1/computer1 as the starter
+# account names. Both were renamed to user/computer$ since "1" added no
+# information once it was clear there'd only ever be one starter of each
+# type. Rename (not delete+recreate) so the SID is preserved and every ACL
+# grant made in later phases keeps applying to the same account untouched.
+# No-op after the first run, once the old names no longer exist.
+$oldUser = Get-ADUser -Filter "SamAccountName -eq 'user1'" -ErrorAction SilentlyContinue
+if ($oldUser -and -not (Get-ADUser -Filter "SamAccountName -eq 'user'" -ErrorAction SilentlyContinue)) {
+    Rename-ADObject -Identity $oldUser.ObjectGUID -NewName "user"
+    Set-ADUser -Identity $oldUser.ObjectGUID -SamAccountName "user" -UserPrincipalName "user@cyberhawks.lab"
+    Write-Output "Migrated user1 -> user (SID preserved: $($oldUser.SID))"
+}
+
+$oldComputer = Get-ADComputer -Filter "Name -eq 'computer1'" -ErrorAction SilentlyContinue
+if ($oldComputer -and -not (Get-ADComputer -Filter "Name -eq 'computer'" -ErrorAction SilentlyContinue)) {
+    Rename-ADObject -Identity $oldComputer.ObjectGUID -NewName "computer"
+    Set-ADComputer -Identity $oldComputer.ObjectGUID -SamAccountName 'computer$' -DNSHostName "computer.cyberhawks.lab"
+    Write-Output "Migrated computer1 -> computer (SID preserved: $($oldComputer.SID))"
+}
+
+$zoneNameForMigration = "cyberhawks.lab"
+$reverseZoneNameForMigration = "2.0.10.in-addr.arpa"
+$oldDnsA = Get-DnsServerResourceRecord -ZoneName $zoneNameForMigration -Name "computer1" -RRType A -ErrorAction SilentlyContinue
+if ($oldDnsA) {
+    Remove-DnsServerResourceRecord -ZoneName $zoneNameForMigration -Name "computer1" -RRType A -Force
+    if (-not (Get-DnsServerResourceRecord -ZoneName $zoneNameForMigration -Name "computer" -RRType A -ErrorAction SilentlyContinue)) {
+        Add-DnsServerResourceRecordA -ZoneName $zoneNameForMigration -Name "computer" -IPv4Address "10.0.2.51"
+    }
+    Write-Output "Migrated DNS A record computer1 -> computer"
+}
+$oldDnsPtr = Get-DnsServerResourceRecord -ZoneName $reverseZoneNameForMigration -Name "51" -RRType Ptr -ErrorAction SilentlyContinue
+if ($oldDnsPtr -and $oldDnsPtr.RecordData.PtrDomainName -like "computer1.*") {
+    Remove-DnsServerResourceRecord -ZoneName $reverseZoneNameForMigration -Name "51" -RRType Ptr -Force
+    Add-DnsServerResourceRecordPtr -ZoneName $reverseZoneNameForMigration -Name "51" -PtrDomainName "computer.$zoneNameForMigration"
+    Write-Output "Migrated DNS PTR record for 10.0.2.51 -> computer.$zoneNameForMigration"
 }
 
 function Ensure-User {
@@ -64,8 +101,8 @@ function Ensure-Computer {
 # --- Starter accounts (the only two accounts students are handed on day one) ---
 # ConvergeIfExists: these two must always match the documented password/state
 # exactly, even on re-run, since students are handed these credentials directly.
-Ensure-User -SamAccountName "user1" -Password "password" -ConvergeIfExists
-Ensure-Computer -Name "computer1" -Password "password" -ConvergeIfExists
+Ensure-User -SamAccountName "user" -Password "password" -ConvergeIfExists
+Ensure-Computer -Name "computer" -Password "password" -ConvergeIfExists
 
 # --- Placeholder computers 2-5 (not real VMs; targets for later phases) ---
 # computer4/computer5's intentionally-weak passwords are set in a later phase
@@ -76,7 +113,7 @@ foreach ($i in 2..5) {
     Ensure-Computer -Name "computer$i" -Password $randomPw
 }
 
-# --- Static DNS records for computer1-5 (10.0.2.51-.55) ---
+# --- Static DNS records for computer, computer2-5 (10.0.2.51-.55) ---
 $zoneName = "cyberhawks.lab"
 $reverseZoneName = "2.0.10.in-addr.arpa"
 
@@ -86,7 +123,7 @@ if (-not (Get-DnsServerZone -Name $reverseZoneName -ErrorAction SilentlyContinue
 }
 
 $computerIps = [ordered]@{
-    "computer1" = "10.0.2.51"
+    "computer" = "10.0.2.51"
     "computer2" = "10.0.2.52"
     "computer3" = "10.0.2.53"
     "computer4" = "10.0.2.54"

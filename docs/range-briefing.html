@@ -396,6 +396,7 @@
       <a href="#aclabuse">ACL Abuse</a>
       <a href="#credexposure">Cred Exposure</a>
       <a href="#weakauth">Weak Auth</a>
+      <a href="#relay">NTLM Relay</a>
       <a href="#sql">SQL</a>
       <a href="#web">Web</a>
       <a href="#adcs">ADCS</a>
@@ -435,7 +436,7 @@
         </tbody>
       </table>
     </div>
-    <p class="section-note">computer1–computer5 also resolve on this subnet (10.0.2.51–.55) but are AD objects only — no OS behind them. They appear as targets below.</p>
+    <p class="section-note">computer, computer2, computer3, computer4, and computer5 also resolve on this subnet (10.0.2.51–.55) but are AD objects only — no OS behind them. They appear as targets below.</p>
   </section>
 
   <section id="access">
@@ -443,13 +444,13 @@
     <div class="access-grid">
       <div class="access-card">
         <div class="k">Domain user</div>
-        <div class="credrow"><span class="label">Username</span><span class="val">user1</span></div>
+        <div class="credrow"><span class="label">Username</span><span class="val">user</span></div>
         <div class="credrow"><span class="label">Password</span><span class="val">password</span></div>
         <div class="desc">Local administrator on <b>web</b> from first boot. Holds every AD access-control right listed under ACL Abuse below.</div>
       </div>
       <div class="access-card">
         <div class="k">Computer account</div>
-        <div class="credrow"><span class="label">Username</span><span class="val">computer1$</span></div>
+        <div class="credrow"><span class="label">Username</span><span class="val">computer$</span></div>
         <div class="credrow"><span class="label">Password</span><span class="val">password</span></div>
         <div class="desc">Used as the attacker-controlled identity for the RBCD finding. Not a real host — see note above.</div>
       </div>
@@ -462,30 +463,30 @@
       <table>
         <thead><tr><th style="width:34%">Finding</th><th style="width:28%">Source</th><th>Target</th></tr></thead>
         <tbody>
-          <tr><td class="finding">Unconstrained Delegation</td><td class="who">user1 (local admin) <span class="arrow">or</span> PrinterBug coercion vs. a DC</td><td class="target mono">web$</td></tr>
+          <tr><td class="finding">Unconstrained Delegation</td><td class="who">user (local admin) <span class="arrow">or</span> PrinterBug coercion vs. a DC</td><td class="target mono">web$</td></tr>
           <tr><td class="finding">Constrained Delegation — no protocol transition</td><td class="who">any domain user, via sql1's sysadmin bug</td><td class="target mono">sql1$ <span class="arrow">→</span> CIFS/dc1</td></tr>
-          <tr><td class="finding">Constrained Delegation — w/ protocol transition (T2A4D)</td><td class="who">user1, via LAPS-granted admin on sql2</td><td class="target mono">sql2$ <span class="arrow">→</span> CIFS/dc1</td></tr>
-          <tr><td class="finding">Resource-Based Constrained Delegation</td><td class="who">user1's ACL write, using computer1 as the delegate</td><td class="target mono">computer2</td></tr>
-          <tr><td class="finding">Shadow Credentials</td><td class="who">user1 (write on msDS-KeyCredentialLink)</td><td class="target mono">computer3</td></tr>
+          <tr><td class="finding">Constrained Delegation — w/ protocol transition (T2A4D)</td><td class="who">user, via LAPS-granted admin on sql2</td><td class="target mono">sql2$ <span class="arrow">→</span> CIFS/dc1</td></tr>
+          <tr><td class="finding">Resource-Based Constrained Delegation</td><td class="who">user's ACL write, using computer as the delegate</td><td class="target mono">computer2</td></tr>
+          <tr><td class="finding">Shadow Credentials</td><td class="who">user (write on msDS-KeyCredentialLink)</td><td class="target mono">computer3</td></tr>
         </tbody>
       </table>
     </div>
   </section>
 
   <section id="aclabuse">
-    <div class="section-head"><h2>AD Access Control</h2><span class="section-count">8 rights — all held by user1</span></div>
+    <div class="section-head"><h2>AD Access Control</h2><span class="section-count">8 rights — all held by user</span></div>
     <div class="tablewrap">
       <table>
         <thead><tr><th style="width:34%">Right</th><th style="width:28%">Source</th><th>Target</th></tr></thead>
         <tbody>
-          <tr><td class="finding">WriteDacl</td><td class="who">user1</td><td class="target">pool account — enumerate</td></tr>
-          <tr><td class="finding">GenericWrite</td><td class="who">user1</td><td class="target">pool account — enumerate</td></tr>
-          <tr><td class="finding">ForceChangePassword</td><td class="who">user1</td><td class="target">pool account — enumerate</td></tr>
-          <tr><td class="finding">WriteOwner</td><td class="who">user1</td><td class="target">pool account — enumerate</td></tr>
-          <tr><td class="finding">Self (group membership)</td><td class="who">user1</td><td class="target mono">Domain Admins</td></tr>
-          <tr><td class="finding">GenericAll</td><td class="who">user1</td><td class="target mono">Default Domain Policy GPO</td></tr>
-          <tr><td class="finding">DCSync (Get-Changes + Get-Changes-All)</td><td class="who">user1</td><td class="target mono">domain root</td></tr>
-          <tr><td class="finding">LAPS password read</td><td class="who">user1</td><td class="target mono">sql2 local Administrator</td></tr>
+          <tr><td class="finding">WriteDacl</td><td class="who">user</td><td class="target">pool account — enumerate</td></tr>
+          <tr><td class="finding">GenericWrite</td><td class="who">user</td><td class="target">pool account — enumerate</td></tr>
+          <tr><td class="finding">ForceChangePassword</td><td class="who">user</td><td class="target">pool account — enumerate</td></tr>
+          <tr><td class="finding">WriteOwner</td><td class="who">user</td><td class="target">pool account — enumerate</td></tr>
+          <tr><td class="finding">Self (group membership)</td><td class="who">user</td><td class="target mono">Domain Admins</td></tr>
+          <tr><td class="finding">GenericAll</td><td class="who">user</td><td class="target mono">Default Domain Policy GPO</td></tr>
+          <tr><td class="finding">DCSync (Get-Changes + Get-Changes-All)</td><td class="who">user</td><td class="target mono">domain root</td></tr>
+          <tr><td class="finding">LAPS password read</td><td class="who">user</td><td class="target mono">sql2 local Administrator</td></tr>
         </tbody>
       </table>
     </div>
@@ -500,7 +501,7 @@
           <tr><td class="finding">Cleartext creds in NETLOGON logon script</td><td class="who">any domain user</td><td class="target">pool account — enumerate</td></tr>
           <tr><td class="finding">Password stored in a Description field</td><td class="who">any domain user</td><td class="target">pool account — enumerate</td></tr>
           <tr><td class="finding">GPP (Group Policy Preferences) cpassword</td><td class="who">any domain user</td><td class="target mono">local acct. "svc-helpdesk"</td></tr>
-          <tr><td class="finding">LSA secret — cached service credential</td><td class="who">user1 (local admin on web)</td><td class="target mono">web \ svc-backup</td></tr>
+          <tr><td class="finding">LSA secret — cached service credential</td><td class="who">user (local admin on web)</td><td class="target mono">web \ svc-backup</td></tr>
           <tr><td class="finding">Plaintext password left in a file share dump</td><td class="who">any domain user, <span class="mono">\\sql1\Shared</span></td><td class="target">pool account — enumerate</td></tr>
           <tr><td class="finding">Web.config.bak leaks live DB connection string</td><td class="who">unauthenticated, over HTTP</td><td class="target mono">svc-web SQL login</td></tr>
         </tbody>
@@ -509,7 +510,7 @@
   </section>
 
   <section id="weakauth">
-    <div class="section-head"><h2>Weak &amp; Missing Authentication</h2><span class="section-count">7 findings</span></div>
+    <div class="section-head"><h2>Weak &amp; Missing Authentication</h2><span class="section-count">8 findings</span></div>
     <div class="tablewrap">
       <table>
         <thead><tr><th style="width:34%">Finding</th><th style="width:28%">Source</th><th>Target</th></tr></thead>
@@ -521,6 +522,21 @@
           <tr><td class="finding">Blank password</td><td class="who">any domain user</td><td class="target mono">computer5</td></tr>
           <tr><td class="finding">ANONYMOUS LOGON — null-session enumeration</td><td class="who">unauthenticated</td><td class="target">full domain user list</td></tr>
           <tr><td class="finding">NetNTLMv1 permitted</td><td class="who">any client on the wire</td><td class="target mono">dc1 &amp; dc2</td></tr>
+          <tr><td class="finding">Unrestricted DNS zone transfer (AXFR)</td><td class="who">unauthenticated</td><td class="target mono">dc1</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="relay">
+    <div class="section-head"><h2>NTLM Relay Practice</h2><span class="section-count">2 findings</span></div>
+    <p class="section-note">Two pool accounts each run a scheduled task every 5 minutes trying to reach a made-up hostname with no DNS record — that failure falls through to LLMNR/NBT-NS/mDNS, which is poisonable. An attacker box at <span class="mono">10.0.2.10</span> (SSH, <span class="mono">test</span>/<span class="mono">test</span>) already has Responder, Pretender, mitm6, and impacket installed for this.</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th style="width:34%">Finding</th><th style="width:28%">Source</th><th>Target</th></tr></thead>
+        <tbody>
+          <tr><td class="finding">WebDAV/HTTP auth on broadcast-resolution fallback</td><td class="who">pool account — enumerate</td><td class="target">relay to LDAP on a DC</td></tr>
+          <tr><td class="finding">SMB auth on broadcast-resolution fallback</td><td class="who">pool account — enumerate, local admin on workstation</td><td class="target mono">relay to workstation</td></tr>
         </tbody>
       </table>
     </div>
@@ -598,11 +614,11 @@
     <div class="section-head"><h2>Essential Notes</h2></div>
     <div class="notes">
       <ul>
-        <li>Every finding above is reachable straight from <span class="mono">user1</span>, <span class="mono">computer1</span>, or an unauthenticated/any-domain-user starting point. You never need to solve one finding to unlock a different one.</li>
+        <li>Every finding above is reachable straight from <span class="mono">user</span>, <span class="mono">computer</span>, or an unauthenticated/any-domain-user starting point. You never need to solve one finding to unlock a different one.</li>
         <li>The pool of ~1000 user accounts is mostly decoys. Real targets are marked <em>"pool account — enumerate"</em> above and have to be found (LDAP, SMB, etc.), not guessed from the name list.</li>
-        <li>The literal password <code>password</code> belongs only to <span class="mono">user1</span> and <span class="mono">computer1</span> — it will not unlock anything else.</li>
-        <li>Machine account quota is unchanged (10), so you can join your own computer account instead of using <span class="mono">computer1</span> if you'd rather keep it clean.</li>
-        <li>Keep testing scoped to the 7 hosts on <span class="mono">10.0.2.0/24</span> above.</li>
+        <li>The literal password <code>password</code> belongs only to <span class="mono">user</span> and <span class="mono">computer</span> — it will not unlock anything else.</li>
+        <li>Machine account quota is unchanged (10), so you can join your own computer account instead of using <span class="mono">computer</span> if you'd rather keep it clean.</li>
+        <li>Keep testing scoped to the 7 hosts and the <span class="mono">10.0.2.10</span> attacker box, all on <span class="mono">10.0.2.0/24</span>.</li>
         <li>If something breaks badly — locked account, corrupted AD object, crashed VM — ask course staff for a snapshot rollback rather than trying to repair it yourself.</li>
       </ul>
     </div>

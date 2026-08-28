@@ -10,7 +10,7 @@
     src: grant_acls.ps1
     dest: "C:\\Windows\\Temp\\grant_acls.ps1"
 
-- name: Grant the nine ACL rights to user1
+- name: Grant the nine ACL rights to user
   ansible.windows.win_shell: "C:\\Windows\\Temp\\grant_acls.ps1 -CsvPath 'C:\\Windows\\Temp\\pool_accounts.csv'"
   register: acl_result
   changed_when: "'Granted' in acl_result.stdout"

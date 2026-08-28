@@ -18,7 +18,7 @@ function Get-PoolUser {
     return $row.username
 }
 
-$user1Sid = New-Object System.Security.Principal.SecurityIdentifier((Get-ADUser user1).SID)
+$userSid = New-Object System.Security.Principal.SecurityIdentifier((Get-ADUser user).SID)
 
 function Get-AttributeGuid {
     param([string]$LdapDisplayName)
@@ -38,7 +38,7 @@ function Add-Ace {
     $acl = Get-Acl -Path $path
 
     $alreadyPresent = $acl.Access | Where-Object {
-        $_.IdentityReference -eq $user1Sid.Translate([System.Security.Principal.NTAccount]) -and
+        $_.IdentityReference -eq $userSid.Translate([System.Security.Principal.NTAccount]) -and
         $_.ActiveDirectoryRights -eq $Rights -and
         $_.AccessControlType -eq [System.Security.AccessControl.AccessControlType]::Allow -and
         $_.ObjectType -eq $ObjectType
@@ -50,10 +50,10 @@ function Add-Ace {
 
     if ($ObjectType -ne [Guid]::Empty) {
         $rule = New-Object System.DirectoryServices.ActiveDirectoryAccessRule(
-            $user1Sid, $Rights, [System.Security.AccessControl.AccessControlType]::Allow, $ObjectType)
+            $userSid, $Rights, [System.Security.AccessControl.AccessControlType]::Allow, $ObjectType)
     } else {
         $rule = New-Object System.DirectoryServices.ActiveDirectoryAccessRule(
-            $user1Sid, $Rights, [System.Security.AccessControl.AccessControlType]::Allow)
+            $userSid, $Rights, [System.Security.AccessControl.AccessControlType]::Allow)
     }
     $acl.AddAccessRule($rule)
     Set-Acl -Path $path -AclObject $acl

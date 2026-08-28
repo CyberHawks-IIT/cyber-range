@@ -1,10 +1,10 @@
 ---
-# Runs against web -- user1 is a local admin here from first boot (starter
+# Runs against web -- user is a local admin here from first boot (starter
 # access), which combined with web's Unconstrained Delegation and admin's
 # autologon session is the classic passive-capture scenario.
-- name: Add user1 to web's local Administrators group
+- name: Add user to web's local Administrators group
   ansible.windows.win_group_membership:
     name: Administrators
     members:
-      - CYBERHAWKS\user1
+      - CYBERHAWKS\user
     state: present

@@ -97,14 +97,14 @@
         name: ad_delegation
         tasks_from: web_autologon
 
-- name: Phase E - user1 local admin on web
+- name: Phase E - user local admin on web
   hosts: web
   gather_facts: false
   tags: [delegation]
   tasks:
     - ansible.builtin.import_role:
         name: ad_delegation
-        tasks_from: user1_local_admin_web
+        tasks_from: user_local_admin_web
 
 - name: Phase F - MSSQL AD accounts (svc-mssql, crackme)
   hosts: dc1
@@ -239,3 +239,38 @@
   tags: [workstation_coercion]
   roles:
     - workstation_coercion
+
+- name: Phase N - NTLM relay trigger local admin grant (SMB relay target)
+  hosts: workstation
+  gather_facts: false
+  tags: [ntlm_relay]
+  tasks:
+    - ansible.builtin.import_role:
+        name: ntlm_relay_triggers
+        tasks_from: grant_local_admin
+
+- name: Phase N - NTLM relay triggers (WebDAV/HTTP + SMB, scheduled on web)
+  hosts: web
+  gather_facts: false
+  tags: [ntlm_relay]
+  tasks:
+    - ansible.builtin.import_role:
+        name: ntlm_relay_triggers
+        tasks_from: deploy_triggers
+
+- name: Phase N - NTLM relay prerequisites (LDAP signing, LLMNR/NBT-NS/mDNS)
+  hosts: dc1,dc2
+  gather_facts: false
+  serial: 1
+  tags: [ntlm_relay]
+  tasks:
+    - ansible.builtin.import_role:
+        name: ntlm_relay_triggers
+        tasks_from: confirm_prereqs
+
+- name: Phase O - Unrestricted DNS zone transfer
+  hosts: dc1
+  gather_facts: false
+  tags: [dns_zone_transfer]
+  roles:
+    - dns_zone_transfer

@@ -12,9 +12,9 @@ Import-Module LAPS
 $resultPath = "C:\Windows\Temp\laps_read_grant_result.txt"
 try {
     $sql2 = Get-ADComputer sql2
-    $user1 = Get-ADUser user1
-    Set-LapsADReadPasswordPermission -Identity $sql2 -AllowedPrincipals $user1.SID.Value
-    "Granted user1 LAPS password read on sql2" | Out-File -FilePath $resultPath
+    $user = Get-ADUser user
+    Set-LapsADReadPasswordPermission -Identity $sql2 -AllowedPrincipals $user.SID.Value
+    "Granted user LAPS password read on sql2" | Out-File -FilePath $resultPath
 } catch {
     "ERROR: $($_.Exception.Message)" | Out-File -FilePath $resultPath -Append
 }

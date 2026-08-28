@@ -26,7 +26,10 @@ SPECIAL_ROLES = [
     "desc_field_pw",
     "asreproast",
     "smbshare_creds",
-] + [f"weakcreds_{i}" for i in range(1, 11)]
+] + [f"weakcreds_{i}" for i in range(1, 11)] + [
+    "ntlm_relay_http",
+    "ntlm_relay_smb",
+]
 
 # Fixed (not randomly generated) passwords for roles where the design
 # specifies an exact value.

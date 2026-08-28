@@ -1,0 +1,49 @@
+---
+# Runs against web. Two scheduled tasks, each running as a distinct "unused"
+# pool account (ntlm_relay_http, ntlm_relay_smb) on a 5-minute interval,
+# each trying to reach a hostname that's never been registered in DNS. Every
+# attempt falls through to LLMNR/NBT-NS/mDNS, giving students a live NTLMv2
+# authentication to capture with Responder/ntlmrelayx -- one relayable to
+# LDAP on a DC, the other relayable to SMB on a host where that account is
+# a local admin.
+- name: Ensure the trigger payload directory exists
+  ansible.windows.win_file:
+    path: "C:\\ProgramData\\CyberHawksSync"
+    state: directory
+
+- name: Upload HTTP/WebDAV relay trigger payload
+  ansible.windows.win_copy:
+    src: http_relay_trigger.ps1
+    dest: "C:\\ProgramData\\CyberHawksSync\\http_relay_trigger.ps1"
+
+- name: Upload SMB relay trigger payload
+  ansible.windows.win_copy:
+    src: smb_relay_trigger.ps1
+    dest: "C:\\ProgramData\\CyberHawksSync\\smb_relay_trigger.ps1"
+
+- name: Upload relay trigger setup script
+  ansible.windows.win_copy:
+    src: setup_relay_triggers.ps1
+    dest: "C:\\Windows\\Temp\\setup_relay_triggers.ps1"
+
+- name: Upload pool credential CSV to web (temp, for role lookups)
+  ansible.windows.win_copy:
+    src: "{{ playbook_dir }}/../generated/pool_accounts.csv"
+    dest: "C:\\Windows\\Temp\\pool_accounts.csv"
+
+- name: Deploy trigger payloads and register the two scheduled tasks
+  ansible.windows.win_shell: "C:\\Windows\\Temp\\setup_relay_triggers.ps1 -CsvPath 'C:\\Windows\\Temp\\pool_accounts.csv'"
+  register: relay_trigger_result
+  changed_when: "'Registered' in relay_trigger_result.stdout"
+
+- name: Show relay trigger setup result
+  ansible.builtin.debug:
+    var: relay_trigger_result.stdout_lines
+
+- name: Remove temp CSV and setup script from web (payload scripts stay, tasks reference them)
+  ansible.windows.win_file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "C:\\Windows\\Temp\\pool_accounts.csv"
+    - "C:\\Windows\\Temp\\setup_relay_triggers.ps1"

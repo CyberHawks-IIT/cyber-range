@@ -1,0 +1,28 @@
+---
+# Runs against dc1 and dc2. Explicitly confirms/sets the handful of settings
+# an NTLM relay to LDAP or over LLMNR/NBT-NS/mDNS actually depends on, rather
+# than assuming defaults haven't drifted -- same rigor as the ESC8/ESC11 CA
+# config elsewhere in this build.
+- name: Upload relay prerequisites confirmation script
+  ansible.windows.win_copy:
+    src: confirm_relay_prereqs.ps1
+    dest: "C:\\Windows\\Temp\\confirm_relay_prereqs.ps1"
+
+- name: Confirm LDAP relay path and LLMNR/NBT-NS/mDNS are not disabled
+  ansible.windows.win_shell: "C:\\Windows\\Temp\\confirm_relay_prereqs.ps1"
+  register: relay_prereqs_result
+  changed_when: "'re-enabled' in relay_prereqs_result.stdout or 'reset to default' in relay_prereqs_result.stdout or '(changed, restart needed)' in relay_prereqs_result.stdout"
+
+- name: Show relay prerequisites result
+  ansible.builtin.debug:
+    var: relay_prereqs_result.stdout_lines
+
+- name: Restart NTDS to apply LDAP signing/channel-binding registry changes
+  ansible.windows.win_shell: "Restart-Service NTDS -Force"
+  when: "'(changed, restart needed)' in relay_prereqs_result.stdout"
+  changed_when: true
+
+- name: Remove temp script
+  ansible.windows.win_file:
+    path: "C:\\Windows\\Temp\\confirm_relay_prereqs.ps1"
+    state: absent

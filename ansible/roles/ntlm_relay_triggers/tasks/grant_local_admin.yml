@@ -1,0 +1,18 @@
+---
+# Runs against workstation. The SMB relay trigger's identity (pool role
+# ntlm_relay_smb) needs to be a local admin somewhere other than where the
+# trigger itself runs, so a successful relay is worth something more than
+# just proving the technique.
+- name: Read pool accounts CSV to find the ntlm_relay_smb account
+  community.general.read_csv:
+    path: "{{ playbook_dir }}/../generated/pool_accounts.csv"
+  delegate_to: localhost
+  become: false
+  register: pool_csv
+
+- name: Add ntlm_relay_smb pool account to workstation's local Administrators group
+  ansible.windows.win_group_membership:
+    name: Administrators
+    members:
+      - "CYBERHAWKS\\{{ pool_csv.list | selectattr('role', 'equalto', 'ntlm_relay_smb') | map(attribute='username') | first }}"
+    state: present

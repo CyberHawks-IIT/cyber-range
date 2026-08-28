@@ -1,0 +1,26 @@
+---
+# Runs against dc1 only, by design (the finding just needs "at least one
+# DC" to permit it). Confirmed empirically that SecureSecondaries is a
+# per-DNS-server zone property even for an AD-integrated zone -- it does
+# NOT replicate to dc2 the way the zone's actual record data does, so dc2
+# still refuses zone transfer (SecureSecondaries stays NoTransfer there)
+# after this runs. If unrestricted transfer is ever wanted from dc2 too,
+# it needs its own explicit run of this same role against dc2.
+- name: Upload DNS zone transfer setup script
+  ansible.windows.win_copy:
+    src: enable_zone_transfer.ps1
+    dest: "C:\\Windows\\Temp\\enable_zone_transfer.ps1"
+
+- name: Enable unrestricted DNS zone transfer on cyberhawks.lab
+  ansible.windows.win_shell: "C:\\Windows\\Temp\\enable_zone_transfer.ps1"
+  register: zone_transfer_result
+  changed_when: "'Enabled' in zone_transfer_result.stdout"
+
+- name: Show zone transfer setup result
+  ansible.builtin.debug:
+    var: zone_transfer_result.stdout_lines
+
+- name: Remove temp script
+  ansible.windows.win_file:
+    path: "C:\\Windows\\Temp\\enable_zone_transfer.ps1"
+    state: absent
