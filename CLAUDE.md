@@ -113,6 +113,28 @@ since they're plain Debian VMs/hosts outside the `qm`-managed AD range — if
 that changes (e.g. they turn out to also be Proxmox guests), reconcile with
 the Proxmox host's `qm list` and add them to a table like the range VMs below.
 
+**Student-facing hostnames added 2026-08-28:** `sysreptor.cyberhawks.lab`,
+`nessus.cyberhawks.lab`, and `bloodhound.cyberhawks.lab` A records were added
+to the `cyberhawks.lab` zone on dc1, pointing at each host's existing
+192.168.0.x address (same pattern used for computer/computer2-5 in the AD
+range: a hand-added record, since these three aren't AD-joined and get no
+dynamic registration of their own). Per the user, resolution for these names
+only works from inside the student-provided testing VMs, not from this
+control host, so verification here was split accordingly: the DNS records
+themselves were confirmed present via `Get-DnsServerResourceRecord` on dc1,
+and each underlying service was confirmed healthy by IP from Kali (sysreptor
+and nessus both 200, bloodhound 200 after its normal redirect to `/ui`).
+Sysreptor needed one real config change beyond the DNS record: its Caddy
+site block was pinned to the literal IP (see the TLS note above), so a
+request for `https://sysreptor.cyberhawks.lab` would have presented an SNI
+Caddy had no matching site for. Fixed by adding the hostname as a second
+site address on the same block (`192.168.0.2:443, sysreptor.cyberhawks.lab:443`)
+and switching the `:80` redirect to use Caddy's `{host}` placeholder instead
+of a hardcoded IP, so it works for either. Verified with `curl --resolve`
+(faking the DNS answer locally) that Caddy issues a proper `tls internal`
+cert for the new hostname and returns 200. Nessus and BloodHound needed no
+equivalent fix since neither does hostname-based TLS/virtual-host routing.
+
 ### Range VMs — all Windows, all accessed over WinRM
 
 All are on the Proxmox `ad` bridge, network `10.0.2.0/24`, gateway `10.0.2.1`,

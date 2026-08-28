@@ -234,6 +234,10 @@
     max-width: 68ch;
   }
 
+  .tablewrap + .section-note {
+    margin-top: 14px;
+  }
+
   .subhead {
     display: flex;
     align-items: center;
@@ -338,16 +342,20 @@
 
   .credrow {
     display: flex;
+    flex-wrap: wrap;
     justify-content: space-between;
     align-items: baseline;
+    gap: 2px 10px;
     padding: 5px 0;
   }
   .credrow + .credrow { border-top: 1px dashed var(--line); }
-  .credrow .label { font-size: 12px; color: var(--text-muted); }
+  .credrow .label { font-size: 12px; color: var(--text-muted); flex-shrink: 0; }
   .credrow .val {
     font-family: "IBM Plex Mono", monospace;
     font-weight: 600;
     font-size: 14px;
+    overflow-wrap: anywhere;
+    text-align: right;
   }
 
   .access-card .desc {
@@ -414,6 +422,7 @@
     <nav class="navlinks">
       <a href="#hosts">Hosts</a>
       <a href="#access">Access</a>
+      <a href="#support-tools">Support Tools</a>
       <a href="#serviceabuse">Service Abuse</a>
       <a href="#delegation">Delegation</a>
       <a href="#aclabuse">ACL Abuse</a>
@@ -495,6 +504,34 @@
         <div class="credrow"><span class="label">Host</span><span class="val">10.0.2.10</span></div>
         <div class="credrow"><span class="label">Login</span><span class="val">test / test</span></div>
         <div class="desc">Debian 12, off-domain. Responder, Pretender, mitm6, and impacket (incl. <span class="mono">ntlmrelayx.py</span>) are pre-installed for the NTLM Relay Practice findings further down.</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="support-tools">
+    <div class="section-head"><h2>Support Tools</h2><span class="section-count">3 hosts</span></div>
+    <p class="section-note">Standing infrastructure for the engagement itself, not targets. All three sit on the separate 192.168.0.0/24 tooling network.</p>
+    <div class="access-grid">
+      <div class="access-card">
+        <div class="k">SysReptor - reporting</div>
+        <div class="credrow"><span class="label">URL</span><span class="val">sysreptor.cyberhawks.lab</span></div>
+        <div class="credrow"><span class="label">IP</span><span class="val">192.168.0.2</span></div>
+        <div class="credrow"><span class="label">Username</span><span class="val">reptor</span></div>
+        <div class="credrow"><span class="label">Password</span><span class="val">rep0rting</span></div>
+        <div class="desc">Write your findings here. Do not enable MFA when prompted; it will lock you out.</div>
+      </div>
+      <div class="access-card">
+        <div class="k">Nessus - vuln scanner</div>
+        <div class="credrow"><span class="label">URL</span><span class="val">nessus.cyberhawks.lab:8834</span></div>
+        <div class="credrow"><span class="label">IP</span><span class="val">192.168.0.3</span></div>
+        <div class="credrow"><span class="label">Username</span><span class="val">nessus</span></div>
+        <div class="credrow"><span class="label">Password</span><span class="val">nessus</span></div>
+      </div>
+      <div class="access-card">
+        <div class="k">BloodHound CE - AD path analysis</div>
+        <div class="credrow"><span class="label">URL</span><span class="val">bloodhound.cyberhawks.lab</span></div>
+        <div class="credrow"><span class="label">IP</span><span class="val">192.168.0.4</span></div>
+        <div class="desc">Login with the same username and password as your Proxmox (PVE) environment access.</div>
       </div>
     </div>
   </section>
