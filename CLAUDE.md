@@ -672,6 +672,58 @@ Per rule 6 above — the real usernames get filled in at provisioning time.
 | Shadow Credentials | computer3 | user1's granted rights |
 | Cross-domain | — | explicitly excluded (single domain) |
 
+## Student attacker/testing VMs (separate from the AD range above)
+
+A second, unrelated set of VMs lives on this same Proxmox host: per-student
+attacker/testing VMs on the `attacker` bridge, network `192.168.1.0/24`
+(gateway/nameserver `192.168.1.1`), distinct from the `cyberhawks.lab` AD
+range (`10.0.2.0/24`) documented above. Each student gets their own PVE
+realm (`@pve`) account plus a Windows + Kali VM pair, linked-cloned from two
+standing templates:
+
+| VMID | Name | Purpose |
+|---|---|---|
+| 604 | Windows2025 | Windows attacker/testing template |
+| 605 | Kali2025.2 | Kali attacker/testing template |
+
+**Provisioning script:** [scripts/create_testing_vms.sh](scripts/create_testing_vms.sh)
+— bulk-creates PVE users + clones from a CSV roster (`name,email,username,password`).
+Must run **on the Proxmox host itself** (uses `qm`/`pveum`/`pvesh` directly),
+not from this Windows control host. Defaults already match this range's
+established pattern, so it's normally invoked with just `--csv`:
+```
+./create_testing_vms.sh --csv /root/roster.csv
+```
+Key behavior (see the script's own header comment for the full option list):
+- names each clone `<username>-<templatename>` (e.g. `matt-windows`, `matt-kali`)
+- VMIDs: next free ID at/after `--start-clone-id` (default 610)
+- IPs: each roster row gets a block of 10 addresses on `192.168.1.0/24`
+  (row 0 → `.10`/`.11`, row 1 → `.20`/`.21`, ...); the script scans existing
+  VMs' `ipconfig0` first and auto-advances past any block already in use, so
+  re-running with the same defaults over an appended roster is safe and
+  collision-free with no manual bookkeeping
+- the CSV `password` column sets the PVE account login only — cloned VMs
+  keep whatever cloud-init credentials are already baked into templates
+  604/605 (not a unique per-student guest OS password)
+- grants the student `PVEVMAdmin` on each of their own VMs (default `--role`)
+- `--dry-run` previews everything with no side effects; safe to run first
+- roster CSVs contain plaintext student passwords — treat as sensitive,
+  don't commit them, delete from both the control host and the Proxmox host
+  once a run succeeds
+
+**Known pre-existing data quirk:** `mohamed-windows` (VMID 622) has
+`ipconfig0` set to `192.168.1.0/24` (the network address, not a usable host
+IP) — looks like a manual mistake from before this script existed, not
+something the script produced. Worth fixing by hand if it ever matters.
+
+**Provisioning history:**
+- **610-623** (pre-existing, predates this script): john/lucas/jamie/ben/
+  lucasc/tristan/mohamed, each `-windows`/`-kali`, blocks `.10`-`.70`. This is
+  the pattern the script above was reverse-engineered from.
+- **2026-08-28:** ran the script for matt/jose/andy/logan/muhammad/deblina
+  (VMIDs 624-635, IP blocks `.80`-`.131`) — first real (non-dry-run) use of
+  the script.
+
 ## Repo layout
 
 ```
@@ -679,6 +731,8 @@ cyber-range/
   CLAUDE.md              # this file
   README.md              # project overview, prerequisites, architecture (public-facing)
   .gitignore             # excludes private keys, vault secrets, retry files
+  scripts/
+    create_testing_vms.sh # bulk student PVE account + attacker/testing VM provisioning
   ansible/
     ansible.cfg
     inventory/
