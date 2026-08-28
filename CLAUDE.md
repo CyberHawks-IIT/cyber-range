@@ -83,9 +83,38 @@ host itself, cloud-init IP set per host above. sql1/sql2 disks resized to 48G
 (from the 32G template default) to match a prior similar range setup found on
 this host (VMs 310-314, tag `cptc-practice-2025` — an earlier/separate
 dc/ca/sql/web set, not part of this project, left untouched). All 7 tagged
-`cyber-range` in Proxmox for identification. DNS: dc1 points at gateway
-(10.0.2.1); dc2 and all other members point at dc1 (10.0.2.2), same pattern as
-the prior range.
+`cyber-range` in Proxmox for identification.
+
+**DNS (updated 2026-08-27 — balanced across both DCs):** neither dc1 nor dc2
+has AD DS/DNS installed yet, so both currently point their own DNS upward at
+the gateway (10.0.2.1) rather than at each other — pointing a DC at another DC
+with no DNS service running just breaks resolution for it. The 5 non-DC
+members are split between the two DCs (primary + the other as secondary) so
+no single DC is a hard dependency:
+
+| VM | Primary DNS | Secondary DNS |
+|---|---|---|
+| dc1 | 10.0.2.1 (gateway) | — |
+| dc2 | 10.0.2.1 (gateway) | — |
+| ca | 10.0.2.2 (dc1) | 10.0.2.3 (dc2) |
+| sql1 | 10.0.2.2 (dc1) | 10.0.2.3 (dc2) |
+| workstation | 10.0.2.2 (dc1) | 10.0.2.3 (dc2) |
+| web | 10.0.2.3 (dc2) | 10.0.2.2 (dc1) |
+| sql2 | 10.0.2.3 (dc2) | 10.0.2.2 (dc1) |
+
+Applied both ways: directly in-guest via `netsh interface ip set/add dns`
+(over WinRM for the 6 reachable VMs — cloud-init/cloudbase-init only runs on
+first boot, which had already happened, so changing Proxmox's config alone
+would not have retroactively updated already-booted guests) **and** in the
+Proxmox cloud-init `--nameserver` config on each VM, so a future re-clone or
+cloud-init reset picks up the same scheme without redoing this by hand.
+
+**Note for when dc1/dc2 are actually promoted to domain controllers with the
+DNS role:** this scheme should be revisited. Standard AD practice is for each
+DC to primary-point at *another* DC (not upstream) for resolution/replication
+health, with the gateway (10.0.2.1) configured as a conditional forwarder
+inside the DNS server role for external names — not as the client-level
+primary resolver like it is now.
 
 **Access:** WinRM, user `Administrator`. Credentials are inherited from the
 Proxmox cloud-init templates (300-304) — same password across all clones since
