@@ -538,11 +538,36 @@ immediately. If this happens again on a fresh clone from templates 300/301
   above). Next real use of this inventory should be writing idempotent
   playbooks that reproduce that build, or the vulnerable-range config below.
 
-## Vulnerable AD range design (planned)
+## Vulnerable AD range design (built 2026-08-28)
 
-Design for the intentionally-vulnerable configuration to build once dc1/dc2 are
-promoted and the domain exists. Goal: cover every Kerberos delegation attack
-variation, plus a broad spread of other common AD/web/SQL misconfigurations.
+Design for the intentionally-vulnerable configuration built on top of the
+domain (dc1/dc2 promoted, ca/sql1/sql2/web/workstation joined). Goal: cover
+every Kerberos delegation attack variation, plus a broad spread of other
+common AD/web/SQL misconfigurations.
+
+**Status: fully built and independently verified as of 2026-08-28.** All of
+Ansible roles/playbooks/generated-account-pool/verification described below
+were implemented in this repo's `ansible/` tree (see `ansible/roles/`,
+`ansible/playbooks/vulnerable-range.yml`) and run against the live range.
+`ansible/VULNERABLE_RANGE_PLAN.md` is the full execution log — phase by
+phase, including every gotcha hit and fixed, and the Phase L section
+documents an independent attacker's-eye-view verification pass from Kali
+(impacket/netexec/certipy-ad/hashcat/ldap3) that confirmed nearly every
+finding below actually works end-to-end, not just that the AD attribute is
+set — including a live-captured Domain Admin Kerberos TGT via the
+Unconstrained Delegation chain, a full MSSQL sysadmin-impersonation →
+linked-server chain, and both Kerberoasting/ASREPRoast hashes cracking to
+their designed plaintexts. Two items are flagged best-effort rather than
+fully confirmed (NTLM reflection and GPP password application on
+workstation), and one (LAPS secret retrieval on sql2) has a provably correct
+ACL grant but wasn't cleanly exploitable with the tooling available in this
+lab's control-host setup — see that file for details. The real
+pool-account username assignments (which pool account plays which role) are
+**not** inlined here — they live in the gitignored
+`ansible/generated/pool_accounts.csv`, generated fresh by the `ad_base_accounts`
+role each time it's run against a new/reset range. A Proxmox snapshot
+`vulnerable-range-v1` exists on all 7 VMs (320-326) capturing this state —
+`qm rollback <vmid> vulnerable-range-v1` restores it.
 
 ### Design rules
 
@@ -778,17 +803,13 @@ cyber-range/
 4. Root-cause the cloudbase-init static-IP bug on templates 300/302 (see Known
    issue above) so future clones from them don't need manual `netsh` fixes.
 5. ~~Build out the Ansible inventory~~ — `ansible/inventory/hosts.yml` now has
-   all 7 VMs grouped by role (2026-08-27). Still needed: actual playbooks
-   (`ansible/playbooks/` is empty) — nothing has been provisioned via Ansible
-   yet, the domain/CA/SQL build was all ad-hoc `Invoke-Command`. Writing
-   playbooks that reproduce that build would both validate the inventory and
-   give a reproducible base to roll forward from.
-6. The "Vulnerable AD range design" section below is still entirely
-   unimplemented — dc1/dc2/ca/sql1/sql2 are up with the base
-   roles/software installed, but none of the intentional
-   misconfigurations, starter accounts, delegation setups, ESC-vulnerable
-   templates, the CyberHawks Employee Portal website, or the SMB file dump
-   have been built yet.
+   all 7 VMs grouped by role (2026-08-27). The original domain/CA/SQL build
+   itself was still done via ad-hoc `Invoke-Command` (predates Ansible being
+   available), but `ansible/playbooks/` is no longer empty — the entire
+   vulnerable-range build (item 6 below) was done through it.
+6. ~~The "Vulnerable AD range design" section below is still entirely
+   unimplemented~~ — done 2026-08-28, see that section for status and
+   `ansible/VULNERABLE_RANGE_PLAN.md` for the full build/verification log.
 
 ## GitHub
 
