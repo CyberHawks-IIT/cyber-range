@@ -358,6 +358,17 @@
     text-align: right;
   }
 
+  .credrow .val.link {
+    color: var(--accent);
+    text-decoration: underline;
+    text-decoration-color: var(--accent-soft);
+    text-underline-offset: 2px;
+  }
+  .credrow .val.link:hover,
+  .credrow .val.link:focus-visible {
+    text-decoration-color: currentColor;
+  }
+
   .access-card .desc {
     margin-top: 10px;
     font-size: 12.5px;
@@ -514,7 +525,7 @@
     <div class="access-grid">
       <div class="access-card">
         <div class="k">SysReptor - reporting</div>
-        <div class="credrow"><span class="label">URL</span><span class="val">sysreptor.cyberhawks.lab</span></div>
+        <div class="credrow"><span class="label">URL</span><a class="val link" href="https://sysreptor.cyberhawks.lab" target="_blank" rel="noopener">https://sysreptor.cyberhawks.lab</a></div>
         <div class="credrow"><span class="label">IP</span><span class="val">192.168.0.2</span></div>
         <div class="credrow"><span class="label">Username</span><span class="val">reptor</span></div>
         <div class="credrow"><span class="label">Password</span><span class="val">rep0rting</span></div>
@@ -522,14 +533,14 @@
       </div>
       <div class="access-card">
         <div class="k">Nessus - vuln scanner</div>
-        <div class="credrow"><span class="label">URL</span><span class="val">nessus.cyberhawks.lab:8834</span></div>
+        <div class="credrow"><span class="label">URL</span><a class="val link" href="https://nessus.cyberhawks.lab:8834" target="_blank" rel="noopener">https://nessus.cyberhawks.lab:8834</a></div>
         <div class="credrow"><span class="label">IP</span><span class="val">192.168.0.3</span></div>
         <div class="credrow"><span class="label">Username</span><span class="val">nessus</span></div>
         <div class="credrow"><span class="label">Password</span><span class="val">nessus</span></div>
       </div>
       <div class="access-card">
         <div class="k">BloodHound CE - AD path analysis</div>
-        <div class="credrow"><span class="label">URL</span><span class="val">bloodhound.cyberhawks.lab</span></div>
+        <div class="credrow"><span class="label">URL</span><a class="val link" href="http://bloodhound.cyberhawks.lab" target="_blank" rel="noopener">http://bloodhound.cyberhawks.lab</a></div>
         <div class="credrow"><span class="label">IP</span><span class="val">192.168.0.4</span></div>
         <div class="desc">Login with the same username and password as your Proxmox (PVE) environment access.</div>
       </div>
