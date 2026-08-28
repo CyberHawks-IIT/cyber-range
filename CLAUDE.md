@@ -126,8 +126,9 @@ qm cloudinit dump <vmid> user
 ```
 This host's `WSMan:\localhost\Client\TrustedHosts` has been set (by the user)
 to include all 7 VM IPs. **Verified 2026-08-27** via authenticated
-`Invoke-Command` (not just port reachability): dc1, dc2, ca, web, sql1, sql2 all
-respond correctly.
+`Invoke-Command` (not just port reachability): all 7 VMs now respond correctly,
+including workstation after the fixes below (confirmed hostname `workstation`,
+`Microsoft Windows 11 Pro N`).
 
 **workstation (VM 326) hit two separate boot issues, both fixed:**
 
@@ -204,10 +205,19 @@ so future clones from it don't need this manual workaround:
      afterward, `nbd` kernel module unloaded — same as before, nothing left
      installed on the Proxmox host.
 
-Leftover from the efidisk0 swaps: `vm-326-disk-0` and `base-304-disk-0` (the
-old, pre-fix EFI vars disks) are now orphaned — unreferenced by any VM config,
-~200K total. Left in place (cleanup wasn't asked for and `zfs destroy` is
-destructive) — safe to remove later if wanted.
+**Cleanup (2026-08-27):** the two orphaned pre-fix EFI vars disks
+(`vm-326-disk-0`, `base-304-disk-0` + its `@__base__` snapshot) were destroyed.
+Since this is a shared host with many other teams' VMs, before deleting
+anything further did a full read-only audit rather than trusting a blind
+"unreferenced" heuristic: listed every zvol on `rpool/data` (132 total),
+cross-referenced against every `qm config`/`pct config` on the host (LXC
+containers turned out to be irrelevant here — their rootfs are ZFS filesystem
+datasets, not volumes, so they don't show up in this at all), and diffed the
+two sets. First pass had a regex bug (required a trailing `-N` after
+`cloudinit` that real cloud-init disk names don't have) that flagged every
+VM's cloudinit disk as a false-positive orphan — caught and fixed before
+deleting anything. **Final result: zero unreferenced disks anywhere on the
+host** — those two were the only orphans that existed, host-wide.
 
 **Known issue found and worked around:** cloud-init/cloudbase-init on templates
 **300 (Windows2016) and 302 (Windows2022) does not reliably apply the static IP**
