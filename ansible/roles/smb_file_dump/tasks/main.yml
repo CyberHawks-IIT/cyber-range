@@ -1,0 +1,32 @@
+---
+# Runs against sql1.
+- name: Extract the SMB-share-creds pool account from the generated CSV
+  ansible.builtin.set_fact:
+    smbshare_match: "{{ lookup('file', playbook_dir + '/../generated/pool_accounts.csv') | regex_search('(?m)^([^,]+),([^,]+),smbshare_creds\\r?$', '\\1', '\\2') }}"
+
+- name: Split the matched username/password
+  ansible.builtin.set_fact:
+    smbshare_username: "{{ smbshare_match[0] }}"
+    smbshare_password: "{{ smbshare_match[1] }}"
+
+- name: Upload SMB file dump build script
+  ansible.windows.win_copy:
+    src: build_file_dump.ps1
+    dest: "C:\\Windows\\Temp\\build_file_dump.ps1"
+
+- name: Build the SMB file dump and share it
+  ansible.windows.win_shell: "C:\\Windows\\Temp\\build_file_dump.ps1"
+  environment:
+    SMBSHARE_USERNAME: "{{ smbshare_username }}"
+    SMBSHARE_PASSWORD: "{{ smbshare_password }}"
+  register: dump_result
+  changed_when: "'Created' in dump_result.stdout"
+
+- name: Show file dump build result
+  ansible.builtin.debug:
+    var: dump_result.stdout_lines
+
+- name: Remove temp script from sql1
+  ansible.windows.win_file:
+    path: "C:\\Windows\\Temp\\build_file_dump.ps1"
+    state: absent
