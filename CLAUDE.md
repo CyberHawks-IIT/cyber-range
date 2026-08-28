@@ -28,11 +28,31 @@ project lives under). Key tooling installed on this host so far:
   can't be scripted. Prefer plain `ssh` with the key for everything else.
 - **GitHub CLI** (`gh`, `C:\Program Files\GitHub CLI\gh.exe`) — installed via
   winget, already authenticated as `RedefiningReality`.
-- **WSL2 + Ansible** — WSL2 install was kicked off via `wsl --install` (requires
-  local admin + a reboot, which Claude can't trigger itself). **Status: pending
-  confirmation that WSL2 finished setting up and Ansible was installed inside
-  it.** Once done, this section should be updated with the distro used and
-  Ansible version.
+- **WSL2 + Ansible** — confirmed set up 2026-08-28. WSL2 itself (kernel/
+  platform) was already enabled, but no distro had actually been installed
+  yet (`wsl --list --verbose` reported none) despite CLAUDE.md previously
+  saying this was pending — turned out it really was still pending, not just
+  unconfirmed. Installed **Kali Linux** (`wsl --install -d kali-linux
+  --no-launch`, distro name `kali-linux`) per the user's choice — chosen over
+  Ubuntu to match the pentest theme, even though it's not strictly needed
+  just to run Ansible as a control host. No interactive first-run setup was
+  needed — `wsl -d kali-linux -u root -- <cmd>` works immediately as root
+  with no default non-root user configured. Installed via `apt-get install -y
+  pipx ansible`: **Ansible core 2.20.3**, **pipx 1.14.0**, Python 3.13.12.
+  `ansible` pulled in `python3-winrm` (pywinrm) as a dependency automatically
+  — confirmed importable — so WinRM connections to the range VMs work out of
+  the box with no extra pip install needed.
+  The repo is reachable from WSL at `/mnt/c/Tools/cyber-range` (confirmed
+  `ansible-inventory -i ansible/inventory/hosts.yml --list` parses cleanly).
+  **Known quirk:** running Ansible from that path prints "Ansible is being
+  run in a world writable directory... ignoring it as an ansible.cfg source"
+  — this is normal DrvFs (Windows-drive-via-WSL) mount behavior, not a real
+  permissions problem, but it does mean `ansible/ansible.cfg` in this repo is
+  silently ignored when run this way. Workaround if that config file's
+  settings matter: point `ANSIBLE_CONFIG` at it explicitly, or invoke
+  `ansible-playbook` with `-i`/other flags instead of relying on
+  auto-discovery. Not yet resolved either way — just documenting the
+  behavior for whoever writes the first real playbook run.
 
 SSH key for range hosts: `~/.ssh/id_ed25519_cyberrange` (public key comment
 `cyberrange-lab`) on this Windows host — private key is gitignored, never
@@ -711,11 +731,6 @@ Key behavior (see the script's own header comment for the full option list):
   don't commit them, delete from both the control host and the Proxmox host
   once a run succeeds
 
-**Known pre-existing data quirk:** `mohamed-windows` (VMID 622) has
-`ipconfig0` set to `192.168.1.0/24` (the network address, not a usable host
-IP) — looks like a manual mistake from before this script existed, not
-something the script produced. Worth fixing by hand if it ever matters.
-
 **Provisioning history:**
 - **610-623** (pre-existing, predates this script): john/lucas/jamie/ben/
   lucasc/tristan/mohamed, each `-windows`/`-kali`, blocks `.10`-`.70`. This is
@@ -747,10 +762,13 @@ cyber-range/
 
 ## Open items / next steps
 
-1. Confirm WSL2 finished installing (user needs to run `wsl --install` elevated
-   + reboot if not already done) and install Ansible inside it. Still not done
-   as of 2026-08-27 (confirmed absent this session) — the domain/CA/SQL build
-   below was done via direct WinRM/PowerShell instead of waiting on this.
+1. ~~Confirm WSL2 finished installing and install Ansible inside it~~ — done
+   2026-08-28: Kali Linux installed as the WSL distro, `pipx`/`ansible`
+   installed via apt (Ansible core 2.20.3), pywinrm confirmed working. See
+   the Control host section above for details. The domain/CA/SQL build
+   earlier in this file was still done via direct WinRM/PowerShell since this
+   wasn't ready yet at the time — writing real playbooks (open item #5) is
+   the next step now that the tooling exists.
 2. ~~`workstation` (VM 326) is not reachable over WinRM~~ — resolved, was
    fixed in an earlier session (Secure Boot + disabled-Administrator fixes);
    workstation has been reachable and used over WinRM throughout this
@@ -771,8 +789,6 @@ cyber-range/
    misconfigurations, starter accounts, delegation setups, ESC-vulnerable
    templates, the CyberHawks Employee Portal website, or the SMB file dump
    have been built yet.
-7. ~~workstation still needs a `domain-configured` snapshot~~ — done
-   2026-08-27, all 7 VMs now share the same snapshot.
 
 ## GitHub
 
