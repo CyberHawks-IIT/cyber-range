@@ -127,8 +127,48 @@ qm cloudinit dump <vmid> user
 This host's `WSMan:\localhost\Client\TrustedHosts` has been set (by the user)
 to include all 7 VM IPs. **Verified 2026-08-27** via authenticated
 `Invoke-Command` (not just port reachability): dc1, dc2, ca, web, sql1, sql2 all
-respond correctly. workstation was still cycling through its first Windows 11
-specialize/reboot on last check — recheck before assuming it's reachable.
+respond correctly.
+
+**workstation (VM 326) hit two separate boot issues, both fixed:**
+
+1. **Secure Boot rejected the VirtIO SCSI driver** (`vioscsi.sys`, error
+   `0xc0000428`, "digital signature couldn't be verified"). Cause: template
+   304's efidisk0 has `pre-enrolled-keys=1`, which populates Secure Boot with
+   only the standard Microsoft certs — not Red Hat's VirtIO signing cert. Since
+   vioscsi.sys is a boot-start driver, Secure Boot blocked it before Windows
+   could even start. Fixed by recreating VM 326's efidisk0 with Secure Boot
+   disabled: `qm set 326 --efidisk0 local-zfs:1,efitype=4m,pre-enrolled-keys=0`
+   (this discards/replaces the EFI vars disk — fine pre-OS-install, would not
+   be fine on a disk with real data). **Template 304 itself still has this
+   config and will produce the same failure for any future clone from it** —
+   not yet fixed at the template level, only worked around on VM 326.
+2. **Built-in `Administrator` account was disabled** — expected Windows 11
+   behavior (unlike Server SKUs, client Windows ships with the built-in
+   Administrator disabled by default; cloudbase-init setting its password
+   doesn't auto-enable it). A disabled account can't authenticate over WinRM
+   either, so this needed an offline fix. With the VM shut down
+   (`qm shutdown 326`), mounted its disk from the Proxmox host itself and
+   edited the SAM hive directly:
+   ```
+   modprobe nbd max_part=8
+   qemu-nbd -c /dev/nbd0 -f raw /dev/zvol/rpool/data/vm-326-disk-1
+   # nbd0p3 is the Windows partition (GPT: p1=EFI, p2=MSR, p3=Windows, p4=Recovery)
+   mount via ntfs-3g, then:
+   printf '2\nq\ny\n' | chntpw -u Administrator <mount>/Windows/System32/config/SAM
+   # option 2 = "Unlock and enable user account"
+   ```
+   Confirmed via `chntpw -l SAM` before/after (Administrator's `dis/lock` flag
+   cleared). Unmounted, `qemu-nbd -d /dev/nbd0`, restarted the VM. `chntpw`
+   and `ntfs-3g` (installed via apt specifically for this) were **purged**
+   afterward per standing instruction — nothing left installed on the Proxmox
+   host from this. Note: while in the SAM hive, found a `cloudbase-init` local
+   admin account that's enabled/not locked (unlike Administrator) — its
+   password is unknown (cloudbase-init generates one internally), so it wasn't
+   used, but it's a secondary admin path worth knowing about if Administrator
+   ever gets re-disabled or locked out again.
+
+Not yet re-verified over WinRM after this fix — recheck before assuming
+workstation is fully reachable.
 
 **Known issue found and worked around:** cloud-init/cloudbase-init on templates
 **300 (Windows2016) and 302 (Windows2022) does not reliably apply the static IP**
