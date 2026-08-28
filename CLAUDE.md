@@ -476,6 +476,27 @@ and since the registry policy is already durably set regardless of the
 service's live state, forcing the restart through wasn't worth the risk on
 a domain controller. Worth knowing if `wuauserv` needs restarting again on a
 Server 2016 box in this range: expect it to hang and don't force it.
+
+**Snapshot refreshed 2026-08-28** to fold the auto-updates-disabled change
+into the baseline: old `domain-configured` snapshot deleted and retaken (same
+name, updated description mentioning updates are disabled) on all 7 VMs, so
+`qm rollback <vmid> domain-configured` now restores to a state that already
+has updates off rather than needing it reapplied. This round surfaced a
+**pending-update gotcha specific to dc1 and sql1** (the two Server 2016
+boxes): both had an update already fully downloaded and staged from before
+this session's `NoAutoUpdate` change — disabling automatic updates stops
+*future* checks/downloads but doesn't cancel an update that's already staged,
+so that install still applies itself on the next reboot/shutdown regardless.
+This is almost certainly what caused the earlier `wuauserv` restart hang on
+these same two VMs too (the update-install process likely held internal
+locks). In practice: `qm shutdown` on both hung with "VM quit/powerdown
+failed" while the guest sat on Windows' "Getting Windows ready" screen for
+several minutes; both eventually finished on their own and powered off
+cleanly. **Don't force a power-cycle through that screen** — let it finish,
+confirm `qm list` shows `stopped`, then snapshot as normal. dc2/ca/web/sql2/
+workstation (Server 2019/2022/Win11) had no staged update and shut down
+immediately. If this happens again on a fresh clone from templates 300/301
+(Server 2016), it's expected, not a sign of a new problem.
 - **README.md added** at repo root — project overview, prerequisites,
   architecture table, repo layout, getting-started steps. Deliberately
   excludes the three standalone Debian tool boxes (sysreptor/nessus/
