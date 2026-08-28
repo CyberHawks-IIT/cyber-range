@@ -139,9 +139,7 @@ respond correctly.
    could even start. Fixed by recreating VM 326's efidisk0 with Secure Boot
    disabled: `qm set 326 --efidisk0 local-zfs:1,efitype=4m,pre-enrolled-keys=0`
    (this discards/replaces the EFI vars disk — fine pre-OS-install, would not
-   be fine on a disk with real data). **Template 304 itself still has this
-   config and will produce the same failure for any future clone from it** —
-   not yet fixed at the template level, only worked around on VM 326.
+   be fine on a disk with real data).
 2. **Built-in `Administrator` account was disabled** — expected Windows 11
    behavior (unlike Server SKUs, client Windows ships with the built-in
    Administrator disabled by default; cloudbase-init setting its password
@@ -169,6 +167,47 @@ respond correctly.
 
 Not yet re-verified over WinRM after this fix — recheck before assuming
 workstation is fully reachable.
+
+**Both issues above were then also fixed on template 304 itself (2026-08-27)**,
+so future clones from it don't need this manual workaround:
+
+- **Secure Boot:** same fix as VM 326 — recreated the template's efidisk0 with
+  `pre-enrolled-keys=0`:
+  `qm set 304 --efidisk0 local-zfs:1,efitype=4m,pre-enrolled-keys=0`.
+  Proxmox created it as `base-304-disk-3` and auto-snapshotted it (`@__base__`)
+  for cloning, same as any template disk.
+- **Administrator disabled:** trickier, since this requires editing the actual
+  Windows install, and Proxmox's ZFS-backed template clones are always
+  `zfs clone base-304-disk-1@__base__ ...` — a **fixed snapshot taken once
+  when the VM was templated**. Editing the live `base-304-disk-1` zvol alone
+  would *not* affect that already-existing snapshot, so future clones would
+  still get the old (disabled-Administrator) state. Fix required updating the
+  snapshot itself:
+  1. Confirmed `vm-326-disk-1` (workstation's OS disk) was the *only* clone
+     depending on `base-304-disk-1@__base__` (`grep -rl base-304
+     /etc/pve/qemu-server/`), and that it was already independently fixed
+     (its own SAM was edited directly, not the shared base) — so detaching it
+     wouldn't lose anything.
+  2. `zfs promote rpool/data/vm-326-disk-1` — makes workstation's disk fully
+     independent (`origin` becomes `-`); the `__base__` snapshot follows the
+     promoted dataset (ends up as `vm-326-disk-1@__base__`), freeing
+     `base-304-disk-1` from having any dependent clones.
+  3. Mounted `base-304-disk-1` via the same `qemu-nbd` + `ntfs-3g` + `chntpw`
+     process as before, applied the same "unlock and enable" fix, unmounted.
+  4. `zfs snapshot rpool/data/base-304-disk-1@__base__` — recreates the
+     snapshot Proxmox's clone process expects, now with Administrator enabled.
+  5. **Verified end-to-end:** cloned template 304 to a throwaway VMID (969),
+     confirmed via `chntpw -l SAM` (read-only, no boot needed) that the fresh
+     clone's Administrator was already enabled, then destroyed the test clone
+     (`qm destroy 969 --purge`).
+  6. `chntpw`/`ntfs-3g` installed via apt for this were **purged again**
+     afterward, `nbd` kernel module unloaded — same as before, nothing left
+     installed on the Proxmox host.
+
+Leftover from the efidisk0 swaps: `vm-326-disk-0` and `base-304-disk-0` (the
+old, pre-fix EFI vars disks) are now orphaned — unreferenced by any VM config,
+~200K total. Left in place (cleanup wasn't asked for and `zfs destroy` is
+destructive) — safe to remove later if wanted.
 
 **Known issue found and worked around:** cloud-init/cloudbase-init on templates
 **300 (Windows2016) and 302 (Windows2022) does not reliably apply the static IP**
