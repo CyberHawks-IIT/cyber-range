@@ -1,0 +1,23 @@
+# SSH keys - never commit private keys
+*id_ed25519*
+!*id_ed25519*.pub
+*id_rsa*
+!*id_rsa*.pub
+*.pem
+*.ppk
+
+# Ansible
+*.retry
+.vault_pass
+vault_pass.txt
+*.vault_pass
+
+# Secrets / local overrides
+secrets.yml
+*.secrets.yml
+.env
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp
