@@ -132,3 +132,21 @@
     - ansible.builtin.import_role:
         name: mssql_misconfig
         tasks_from: sql1
+
+- name: Phase G - CyberHawksPortal database on sql1
+  hosts: sql1
+  gather_facts: false
+  tags: [website]
+  tasks:
+    - ansible.builtin.import_role:
+        name: web_portal
+        tasks_from: db_setup
+
+- name: Phase G - CyberHawks Employee Portal website on web
+  hosts: web
+  gather_facts: false
+  tags: [website]
+  tasks:
+    - ansible.builtin.import_role:
+        name: web_portal
+        tasks_from: site_setup

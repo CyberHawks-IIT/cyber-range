@@ -1,0 +1,64 @@
+---
+# Runs against web.
+- name: Install IIS + ASP.NET 4.5 features
+  ansible.windows.win_feature:
+    name:
+      - Web-Server
+      - Web-Asp-Net45
+      - Web-Net-Ext45
+      - Web-ISAPI-Ext
+      - Web-ISAPI-Filter
+      - Web-Default-Doc
+      - Web-Http-Errors
+      - Web-Static-Content
+    state: present
+  register: iis_result
+
+- name: Deploy Default.aspx
+  ansible.windows.win_copy:
+    src: Default.aspx
+    dest: "C:\\inetpub\\wwwroot\\Default.aspx"
+
+- name: Deploy Home.aspx
+  ansible.windows.win_copy:
+    src: Home.aspx
+    dest: "C:\\inetpub\\wwwroot\\Home.aspx"
+
+- name: Deploy Web.config with the real svc-web connection string
+  ansible.windows.win_template:
+    src: Web.config.j2
+    dest: "C:\\inetpub\\wwwroot\\Web.config"
+  vars:
+    svc_web_password: "{{ lookup('ansible.builtin.password', playbook_dir + '/../generated/svc_web_password.txt', length=20, chars=['ascii_letters', 'digits']) }}"
+
+# The intentional leak: IIS blocks direct requests for "Web.config" by
+# filename/extension via its built-in hiddenSegments handler, but not for
+# a differently-named .bak copy sitting right next to it.
+- name: Leave a Web.config.bak copy alongside the live Web.config
+  ansible.windows.win_copy:
+    remote_src: true
+    src: "C:\\inetpub\\wwwroot\\Web.config"
+    dest: "C:\\inetpub\\wwwroot\\Web.config.bak"
+
+# IIS's static file handler won't serve ANY extension without a registered
+# MIME type -- unmapped extensions 404 even though the file exists (not a
+# real access block). Registered server-wide (applicationHost.config) so
+# the leaked Web.config.bak's own content stays a clean, realistic-looking
+# accidental backup rather than being polluted with this plumbing.
+- name: Register a MIME type for .bak so IIS will actually serve it
+  ansible.windows.win_shell: >
+    & "$env:windir\system32\inetsrv\appcmd.exe" set config /section:staticContent /+"[fileExtension='.bak',mimeType='application/octet-stream']"
+  register: mime_result
+  changed_when: "'ERROR' not in mime_result.stderr"
+  failed_when: false
+
+- name: Set default document to Default.aspx via appcmd
+  ansible.windows.win_shell: >
+    & "$env:windir\system32\inetsrv\appcmd.exe" set config "Default Web Site" /section:defaultDocument /+"files.[value='Default.aspx']" /commit:apphost
+  changed_when: true
+  failed_when: false
+
+- name: Ensure Default Web Site is started
+  ansible.windows.win_shell: "Import-Module WebAdministration; Start-Website -Name 'Default Web Site'"
+  changed_when: true
+  failed_when: false

@@ -1,0 +1,22 @@
+---
+# Runs against sql1.
+- name: Upload CyberHawksPortal DB setup script
+  ansible.windows.win_copy:
+    src: create_portal_db.sql
+    dest: "C:\\Windows\\Temp\\create_portal_db.sql"
+
+- name: Apply CyberHawksPortal DB setup
+  ansible.windows.win_shell: >
+    sqlcmd -S localhost -E -v SvcWebPassword="{{ lookup('ansible.builtin.password', playbook_dir + '/../generated/svc_web_password.txt', length=20, chars=['ascii_letters', 'digits']) }}"
+    -i C:\Windows\Temp\create_portal_db.sql
+  register: db_result
+  changed_when: true
+
+- name: Show DB setup result
+  ansible.builtin.debug:
+    var: db_result.stdout_lines
+
+- name: Remove temp script from sql1
+  ansible.windows.win_file:
+    path: "C:\\Windows\\Temp\\create_portal_db.sql"
+    state: absent
