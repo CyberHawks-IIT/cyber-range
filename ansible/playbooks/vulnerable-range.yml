@@ -10,3 +10,30 @@
   tags: [base_accounts]
   roles:
     - ad_base_accounts
+
+- name: Phase C - LAPS schema extension + self-permission
+  hosts: dc2
+  gather_facts: false
+  tags: [laps]
+  tasks:
+    - ansible.builtin.import_role:
+        name: laps
+        tasks_from: schema_and_permissions
+
+- name: Phase C - LAPS enable on ca and sql2
+  hosts: ca,sql2
+  gather_facts: false
+  tags: [laps]
+  tasks:
+    - ansible.builtin.import_role:
+        name: laps
+        tasks_from: enable_on_targets
+
+- name: Phase C - LAPS verification
+  hosts: dc2
+  gather_facts: false
+  tags: [laps]
+  tasks:
+    - ansible.builtin.import_role:
+        name: laps
+        tasks_from: verify

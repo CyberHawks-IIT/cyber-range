@@ -43,10 +43,12 @@ in Phase H below.
   `vault.yml`) so re-runs are idempotent and the placeholder→real-username
   mapping (writedacl target, forcechangepw target, etc.) stays fixed and
   documented for later reference.
-- **LAPS**: legacy Microsoft LAPS (`AdmPwd.E.msi` + `Update-AdmPwdADSchema`),
-  not native Windows LAPS — works uniformly across Server 2016/2019/2022
-  without depending on specific cumulative updates (auto-updates are
-  disabled per CLAUDE.md, so I can't assume recent KBs are present).
+- **LAPS**: switched to **native Windows LAPS** (checked live — both `ca`
+  (Server 2019) and `sql2` (Server 2022) already have the in-box `LAPS`
+  PowerShell module and `Get-LapsADPassword`, so no download/install step is
+  needed at all, and there's no dependency on Microsoft's legacy LAPS
+  download page possibly no longer existing in 2026). Uses
+  `msLAPS-Password`, not `ms-Mcs-AdmPwd`.
 - **Website**: ASP.NET Web Forms (loose `.aspx` files, IIS compiles on first
   request — no build/publish pipeline needed), so `Web.config` naturally
   holds a real `<connectionStrings>` entry per the design's requirement that
@@ -118,8 +120,9 @@ computer3, WriteProperty(msDS-AllowedToActOnBehalfOfOtherIdentity) →
 computer2, GenericAll → "Default Domain Policy" GPO, Self → "Domain Admins"
 group, ForceChangePassword → forcechangepw-target user, DCSync (Replicating
 Directory Changes + Changes All) → domain root, WriteOwner → writeowner-target
-user, CONTROL_ACCESS read on `ms-Mcs-AdmPwd` → sql2's computer object (the
-only one of the ten with a hard dependency on C above). Note:
+user, CONTROL_ACCESS read on `msLAPS-Password` (Windows LAPS attribute,
+switched from legacy LAPS's `ms-Mcs-AdmPwd` — see Phase C) → sql2's computer
+object (the only one of the ten with a hard dependency on C above). Note:
 computer2/computer3's delegation/shadow-cred *attributes* are deliberately
 left empty here — only the ACE granting user1 write access is created; the
 attribute write itself is the student's exploit step. All AD reads/writes
@@ -275,8 +278,8 @@ what's actually been done vs. still pending, without re-deriving it from
 scratch.
 
 - [x] A. Control-node prep — collections, verification tooling, vault populated (`S@lcianaszkot23`), jsmith.txt fetched (48,705 names), WinRM confirmed to all 7 VMs, `/mnt/c` DrvFs metadata mode fixed (was silently ignoring ansible.cfg)
-- [ ] B. Foundational AD objects
-- [ ] C. LAPS
+- [x] B. Foundational AD objects — user1/computer1 converged to `password` (had to disable domain password complexity first; a pre-existing disabled `user1` from unrelated earlier testing was corrected), 1000-account pool created (18 special roles assigned, verified via real domain auth + ASREPRoast flag + description field), computer2-5 + DNS A/PTR records created and resolution-verified. Also fixed group_vars location (was under `ansible/group_vars`, `ansible-playbook` needs it alongside the inventory) and `ansible.cfg` (`roles_path`, `vault_password_file`).
+- [x] C. LAPS — switched to native Windows LAPS (already present on ca/sql2, no download needed). Hit 3 real issues along the way: (1) schema updates weren't allowed on the schema master by default — enabled via registry; (2) `Update-LapsADSchema`/`Set-LapsADComputerSelfPermission` hit the same NTLM double-hop issue documented elsewhere in CLAUDE.md — fixed via the same scheduled-task workaround, and split into two steps with a replication pause between them since the self-permission grant needs the schema change to have replicated first; (3) `BackupDirectory=1` means Azure AD not Active Directory (2 is AD) — first attempt silently configured Azure AD backup and rotated nothing. Verified end-to-end: LAPS actually rotated ca/sql2's local Administrator passwords (confirmed via real authentication) — which meant updating `ansible_user` to the domain account for ca/sql2 in the inventory, since the old shared local-admin password Ansible used no longer works for them (by design — that's the point of LAPS).
 - [ ] D. ACL grants
 - [ ] E. Delegation configs
 - [ ] F. MSSQL misconfiguration

@@ -1,0 +1,61 @@
+---
+# Runs against dc2 (Server 2019 DC -- has both ActiveDirectory and the
+# in-box LAPS PowerShell module; dc1 is Server 2016 and lacks LAPS, ca has
+# LAPS but not RSAT ActiveDirectory). Schema operations work remotely over
+# LDAP regardless of which host issues them.
+
+- name: Upload schema extension script to dc2
+  ansible.windows.win_copy:
+    src: extend_schema.ps1
+    dest: "C:\\Windows\\Temp\\extend_schema.ps1"
+
+- name: Extend AD schema for Windows LAPS
+  ansible.windows.win_shell: "C:\\Windows\\Temp\\extend_schema.ps1"
+  environment:
+    ADMIN_PASSWORD: "{{ vault_windows_admin_password }}"
+  register: schema_result
+  changed_when: "'Extended AD schema' in schema_result.stdout"
+
+- name: Show schema extension result
+  ansible.builtin.debug:
+    var: schema_result.stdout_lines
+
+- name: Remove schema extension script from dc2
+  ansible.windows.win_file:
+    path: "C:\\Windows\\Temp\\extend_schema.ps1"
+    state: absent
+
+- name: Force replication of the schema change to all DCs
+  ansible.windows.win_shell: "repadmin /syncall /AdeP"
+  register: repl_result
+  changed_when: false
+  failed_when: false
+
+- name: Show replication sync result
+  ansible.builtin.debug:
+    var: repl_result.stdout_lines
+
+- name: Pause briefly for schema cache to settle after replication
+  ansible.builtin.pause:
+    seconds: 15
+
+- name: Upload self-permission grant script to dc2
+  ansible.windows.win_copy:
+    src: grant_self_permission.ps1
+    dest: "C:\\Windows\\Temp\\grant_self_permission.ps1"
+
+- name: Grant LAPS computer self-permission on the Computers container
+  ansible.windows.win_shell: "C:\\Windows\\Temp\\grant_self_permission.ps1"
+  environment:
+    ADMIN_PASSWORD: "{{ vault_windows_admin_password }}"
+  register: perm_result
+  changed_when: "'Granted LAPS self-permission' in perm_result.stdout"
+
+- name: Show self-permission grant result
+  ansible.builtin.debug:
+    var: perm_result.stdout_lines
+
+- name: Remove self-permission grant script from dc2
+  ansible.windows.win_file:
+    path: "C:\\Windows\\Temp\\grant_self_permission.ps1"
+    state: absent

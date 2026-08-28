@@ -1,0 +1,14 @@
+---
+# Runs against dc1 -- confirms both targets actually rotated a password,
+# not just that the policy/registry keys were set.
+- name: Confirm LAPS passwords are populated for ca and sql2
+  ansible.windows.win_shell: >
+    Import-Module LAPS;
+    "ca: " + [string](Get-LapsADPassword -Identity ca -ErrorAction Stop).PasswordUpdateTime;
+    "sql2: " + [string](Get-LapsADPassword -Identity sql2 -ErrorAction Stop).PasswordUpdateTime
+  register: laps_verify
+  changed_when: false
+
+- name: Show LAPS verification result
+  ansible.builtin.debug:
+    var: laps_verify.stdout_lines

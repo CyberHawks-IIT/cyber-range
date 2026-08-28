@@ -1,0 +1,19 @@
+---
+# Runs against ca and sql2 only.
+- name: Upload Windows LAPS enable/rotate script
+  ansible.windows.win_copy:
+    src: enable_windows_laps.ps1
+    dest: "C:\\Windows\\Temp\\enable_windows_laps.ps1"
+
+- name: Enable Windows LAPS policy and trigger initial rotation
+  ansible.windows.win_shell: "C:\\Windows\\Temp\\enable_windows_laps.ps1"
+  register: laps_result
+
+- name: Show LAPS enable result
+  ansible.builtin.debug:
+    var: laps_result.stdout_lines
+
+- name: Remove temp script
+  ansible.windows.win_file:
+    path: "C:\\Windows\\Temp\\enable_windows_laps.ps1"
+    state: absent
