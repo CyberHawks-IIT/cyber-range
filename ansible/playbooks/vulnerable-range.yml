@@ -232,3 +232,10 @@
     - ansible.builtin.import_role:
         name: ad_misc_findings
         tasks_from: web_lsa_secret
+
+- name: Phase K - Workstation coercion setup (best-effort, see plan)
+  hosts: workstation
+  gather_facts: false
+  tags: [workstation_coercion]
+  roles:
+    - workstation_coercion
