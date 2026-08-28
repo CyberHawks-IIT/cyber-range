@@ -887,6 +887,40 @@ cyber-range/
    unimplemented~~ — done 2026-08-28, see that section for status and
    `ansible/VULNERABLE_RANGE_PLAN.md` for the full build/verification log.
 
+## Service abuse practice host — 10.1.1.1
+
+A standalone Debian 13 (trixie) VM (hostname `demo`), unrelated to the
+`cyberhawks.lab` AD range — different subnet (`10.1.1.0/24`, not
+`10.0.2.0/24`), not domain-joined, no AD/Kerberos exposure of its own.
+Purpose-built for practicing classic network-service abuse rather than
+Windows/AD-specific attacks: FTP, TFTP, SNMP, SMTP, VNC, NFS, weak
+SSH/Telnet creds, and SMB null sessions.
+
+**Admin access (not for students):** SSH as `sysadmin` / `S@lcianaszkot23`
+(passwordless sudo). This is the box's own administrative account, unrelated
+to every finding below — never hand it to students, only the guessable
+`administrator`/`password` account (itself one of the findings) is meant
+for them.
+
+**Findings, confirmed live 2026-08-28 from Kali:**
+
+| Service | Finding | Notes |
+|---|---|---|
+| FTP (21) | Anonymous login | vsftpd, `anonymous_enable=YES` — already configured, no change needed |
+| TFTP (69/udp) | Guessable filename | `/srv/tftp/startup-config` (matches Metasploit's `tftpbrute` wordlist), added — contains a fake Cisco-style config with a bogus SNMP/enable-secret flavor for realism. Server-side confirmed correct via packet capture (parses the RRQ, returns a properly-sized OACK), but a full client round-trip couldn't be completed from any position tried here (WSL2-Kali, and a raw socket test direct from the Windows control host itself both got no reply back) — looks like a NAT/firewall hop between this control setup and `10.1.1.0/24` that doesn't handle TFTP's mid-transfer port switch (the data phase replies from a new ephemeral port, which breaks naive NAT without a TFTP ALG). Not a misconfiguration of the host itself — worth re-testing from wherever students actually connect from, since that path may not share this control host's quirk. |
+| SNMP (161/udp) | v1, `public`/`private` community strings | already configured (`rocommunity`/`rwcommunity ... default`) — no change needed |
+| SMTP (25) | Open mail relay | `mynetworks = 127.0.0.0/8 0.0.0.0/0` already made every source "trusted" — no change needed. Confirmed by relaying a message to a nonexistent external domain; Postfix queued it rather than rejecting |
+| SMTP (25) | VRFY user enumeration | `disable_vrfy_command = no` was already set, but `mydestination` was the non-functional literal `*` — Postfix's local-recipient check never actually engaged, so VRFY returned an identical ambiguous `252` for real and fake usernames alike, which doesn't actually leak anything. Fixed by setting `mydestination` to the real hostname/domain (`$myhostname, localhost.$mydomain, localhost, $mydomain`) — VRFY now returns `252` for real accounts and `550 User unknown` for fake ones |
+| VNC (5901) | No authentication | TigerVNC already running `-SecurityTypes None` as `administrator` — no change needed |
+| NFS (2049) | Mountable, writable export | `/srv/nfs` was already `rw,no_root_squash`, but implicitly `secure` (requires the client to mount from a privileged source port — most attacker tooling, and Linux's own default unprivileged mount, doesn't). Added `insecure` to the export in `/etc/exports` so an ordinary mount succeeds |
+| SSH (22) | Guessable creds | `administrator`/`password` (from SecLists' `ssh-betterdefaultpasslist`) — password set explicitly to guarantee the match |
+| Telnet (23) | Guessable creds | same `administrator`/`password` account, via `inetutils-inetd` → `/usr/sbin/telnetd` → the standard `login` PAM flow |
+| SMB (445) | Null-session share | `[sambashare]` already had `guest ok = yes` plus a global `map to guest = bad user` — anonymous share listing, read, and write all confirmed with no credentials |
+
+Every finding above was verified live end-to-end (not just "the config file
+says so") except TFTP's full client round-trip, flagged as a control-host
+network-path artifact rather than an assumed failure.
+
 ## GitHub
 
 Repo: `CyberHawks-IIT/cyber-range` (private).

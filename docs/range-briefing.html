@@ -401,6 +401,7 @@
       <a href="#web">Web</a>
       <a href="#adcs">ADCS</a>
       <a href="#workstation">Workstation</a>
+      <a href="#serviceabuse">Service Abuse</a>
       <a href="#notes">Notes</a>
     </nav>
   </div>
@@ -409,7 +410,7 @@
 <div class="hero">
   <p class="eyebrow">Training Range Briefing</p>
   <h1>CyberHawks AD Range</h1>
-  <p class="lede">A single Windows domain, deliberately misconfigured across every major attack surface: Kerberos delegation, AD access control, credential hygiene, SQL Server, a web app, and Active Directory Certificate Services. Everything below is reachable from the starter access you're handed — nothing requires guessing.</p>
+  <p class="lede">A single Windows domain, deliberately misconfigured across every major attack surface: Kerberos delegation, AD access control, credential hygiene, SQL Server, a web app, and Active Directory Certificate Services — plus a standalone Linux host for classic network-service abuse. Everything below is reachable from the starter access you're handed — nothing requires guessing.</p>
   <div class="statline">
     <div class="stat"><span class="k">Domain</span><span class="v mono">cyberhawks.lab</span></div>
     <div class="stat"><span class="k">NetBIOS</span><span class="v mono">CYBERHAWKS</span></div>
@@ -616,6 +617,29 @@
     </div>
   </section>
 
+  <section id="serviceabuse">
+    <div class="section-head"><h2>Service Abuse Practice</h2><span class="section-count">10 findings</span></div>
+    <p class="section-note">A separate, non-domain Linux host at <span class="mono">10.1.1.1</span> (Debian, hostname <span class="mono">demo</span>) for practicing classic network-service misconfigurations — nothing here needs a <span class="mono">cyberhawks.lab</span> credential.</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th style="width:34%">Finding</th><th style="width:28%">Source</th><th>Target</th></tr></thead>
+        <tbody>
+          <tr><td class="finding">FTP anonymous login</td><td class="who">unauthenticated</td><td class="target mono">FTP (21)</td></tr>
+          <tr><td class="finding">TFTP file with a guessable name</td><td class="who">unauthenticated</td><td class="target mono">TFTP (69/udp)</td></tr>
+          <tr><td class="finding">SNMPv1 default community strings</td><td class="who">unauthenticated</td><td class="target mono">SNMP (161/udp)</td></tr>
+          <tr><td class="finding">SMTP open mail relay</td><td class="who">unauthenticated</td><td class="target mono">SMTP (25)</td></tr>
+          <tr><td class="finding">SMTP VRFY user enumeration</td><td class="who">unauthenticated</td><td class="target mono">SMTP (25)</td></tr>
+          <tr><td class="finding">VNC with no authentication</td><td class="who">unauthenticated</td><td class="target mono">VNC (5901)</td></tr>
+          <tr><td class="finding">NFS mountable, writable export</td><td class="who">unauthenticated</td><td class="target mono">NFS (2049)</td></tr>
+          <tr><td class="finding">SSH guessable credentials</td><td class="who">unauthenticated</td><td class="target mono">SSH (22)</td></tr>
+          <tr><td class="finding">Telnet guessable credentials</td><td class="who">unauthenticated</td><td class="target mono">Telnet (23)</td></tr>
+          <tr><td class="finding">SMB null-session share</td><td class="who">unauthenticated</td><td class="target mono">SMB (445)</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="section-note">The SSH and Telnet accounts are both <span class="mono">administrator</span> / <span class="mono">password</span> — straight out of SecLists' <span class="mono">ssh-betterdefaultpasslist</span>.</p>
+  </section>
+
   <section id="notes">
     <div class="section-head"><h2>Essential Notes</h2></div>
     <div class="notes">
@@ -624,7 +648,7 @@
         <li>The pool of ~1000 user accounts is mostly decoys, and the <em>usernames</em> themselves aren't a secret — they're drawn straight from a public statistically-likely-usernames list, so username enumeration/spraying tools will find real accounts easily. The <em>passwords</em> are what's actually protected: real targets are marked <em>"pool account — enumerate"</em> above and have to be found (LDAP, SMB, etc.), not guessed.</li>
         <li>The literal password <code>password</code> belongs only to <span class="mono">user</span> and <span class="mono">computer</span> — it will not unlock anything else.</li>
         <li>Machine account quota is unchanged (10), so you can join your own computer account instead of using <span class="mono">computer</span> if you'd rather keep it clean.</li>
-        <li>Keep testing scoped to the 7 hosts and the <span class="mono">10.0.2.10</span> attacker box, all on <span class="mono">10.0.2.0/24</span>.</li>
+        <li>Keep testing scoped to the 7 AD hosts and the <span class="mono">10.0.2.10</span> attacker box (both on <span class="mono">10.0.2.0/24</span>), plus the standalone <span class="mono">10.1.1.1</span> service-abuse host.</li>
         <li>If something breaks badly — locked account, corrupted AD object, crashed VM — ask course staff for a snapshot rollback rather than trying to repair it yourself.</li>
       </ul>
     </div>
