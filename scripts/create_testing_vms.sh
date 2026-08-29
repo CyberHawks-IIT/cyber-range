@@ -170,8 +170,20 @@ log "Templates (in clone order): $_tmpl_desc"
 
 # ---------------------------------------------------------------------------
 # Existing state on the host (used for collision checks)
+#
+# Everything here is gathered with a small, constant number of bulk queries
+# up front, then kept up to date in memory as this run creates VMs — NOT via
+# one `qm`/`pvesh` call per existing VM per check. This host accumulates VMs
+# from many unrelated projects (60+ at last count, not just this project's),
+# so an O(existing VM count) per-VM subprocess loop gets noticeably slow as
+# the host fills up; a handful of O(1) bulk calls stays fast regardless.
 # ---------------------------------------------------------------------------
-mapfile -t EXISTING_VMIDS < <(qm list | awk 'NR>1{print $1}')
+declare -A EXISTING_NAMES=()
+EXISTING_VMIDS=()
+while read -r vid vname _rest; do
+  EXISTING_VMIDS+=("$vid")
+  EXISTING_NAMES["$vname"]=1
+done < <(qm list | awk 'NR>1{print $1, $2}')
 
 vmid_exists() {
   local id="$1"
@@ -182,8 +194,7 @@ vmid_exists() {
 }
 
 vm_name_exists() {
-  local name="$1"
-  qm list | awk -v n="$name" 'NR>1 && $2==n{found=1} END{exit !found}'
+  [[ -n "${EXISTING_NAMES[$1]:-}" ]]
 }
 
 pve_user_exists() {
@@ -198,11 +209,25 @@ pve_pool_exists() {
   pvesh get "/pools/$1" >/dev/null 2>&1
 }
 
+# One bulk grep across every VM's config file instead of one `qm config`
+# subprocess per VM. -m1 takes only the first ipconfig0 match per file, which
+# is the live/current value — a config file can carry additional stale copies
+# under snapshot sections further down, and those must not be treated as an
+# in-use IP.
 declare -A EXISTING_IPS=()
-for id in "${EXISTING_VMIDS[@]}"; do
-  ip="$(qm config "$id" 2>/dev/null | sed -n 's/^ipconfig0:.*ip=\([0-9.]*\)\/.*/\1/p')"
-  [[ -n "$ip" ]] && EXISTING_IPS["$ip"]="$id"
-done
+QEMU_CONF_DIR="/etc/pve/qemu-server"
+if [[ -d "$QEMU_CONF_DIR" ]]; then
+  while IFS=: read -r conf_path ip; do
+    id="$(basename "$conf_path" .conf)"
+    EXISTING_IPS["$ip"]="$id"
+  done < <(grep -H -m1 -oP '^ipconfig0:.*?ip=\K[0-9.]+(?=/)' "$QEMU_CONF_DIR"/*.conf 2>/dev/null)
+else
+  warn "$QEMU_CONF_DIR not found — falling back to one qm config call per VM (slower)"
+  for id in "${EXISTING_VMIDS[@]}"; do
+    ip="$(qm config "$id" 2>/dev/null | sed -n 's/^ipconfig0:.*ip=\([0-9.]*\)\/.*/\1/p')"
+    [[ -n "$ip" ]] && EXISTING_IPS["$ip"]="$id"
+  done
+fi
 
 NEXT_VMID_POINTER="$START_CLONE_ID"
 next_free_vmid() {
@@ -380,6 +405,7 @@ while IFS=',' read -r raw_name raw_email raw_username raw_password || [[ -n "${r
 
     EXISTING_IPS["$ip"]="$newid"
     EXISTING_VMIDS+=("$newid")
+    EXISTING_NAMES["$vm_name"]=1
 
     if [[ "$START_VMS" -eq 1 ]]; then
       log "Starting VM $newid"
