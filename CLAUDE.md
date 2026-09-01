@@ -945,4 +945,90 @@ network-path artifact rather than an assumed failure.
 
 ## GitHub
 
-Repo: `CyberHawks-IIT/cyber-range` (private).
+Repos: `CyberHawks-IIT/cyber-range` and `CyberHawks-IIT/AttackerVMs` — both
+**public** (this file previously said cyber-range was private; corrected
+2026-09-01, confirmed via `gh repo list CyberHawks-IIT`).
+
+## Remote Control instance (Proxmox host, 2026-09-01)
+
+A second, always-on Claude Code instance runs directly on the Proxmox host
+(`192.168.192.150`) as root, reachable from any device via Claude Code's
+Remote Control feature (claude.ai/code or the mobile app's Code tab) —
+independent of the Windows control host being powered on.
+
+- **Install:** native installer (`curl -fsSL https://claude.ai/install.sh | bash`),
+  not npm — installs to `~/.local/bin/claude`. Auth via `claude auth login`
+  (Pro/Max/Team/Enterprise subscription required for Remote Control — API
+  keys don't work for it) and `gh auth login` (device-code flow; `gh` itself
+  installed straight from Debian trixie's own apt repo) were both done
+  interactively by the user over SSH, not something scriptable unattended.
+- **Repos:** both cloned to `/root/cyber-range` and `/root/AttackerVMs`.
+  `/root/cyber-range` (this file) is the instance's working directory, so it
+  gets the same project context as any other session here. Git identity set
+  to match this control host (`RedefiningReality` / `johnthejolly@gmail.com`);
+  `gh auth login`'s git-credential-helper step means push works over HTTPS
+  with no separate SSH deploy key — confirmed via
+  `gh api repos/CyberHawks-IIT/cyber-range --jq .permissions` showing
+  `push: true`.
+- **SSH key:** `id_ed25519_cyberrange` (both halves) copied from this control
+  host to `/root/.ssh/` on Proxmox (`chmod 600` private key), so the Proxmox
+  instance can pubkey-auth into the same hosts this control host can —
+  verified against bloodhound. Does **not** cover the `demo` host
+  (10.1.1.1), which intentionally uses a separate `sysadmin`/password login
+  (see that section above).
+- **systemd service:** `/etc/systemd/system/claude-remote-control.service`
+  (`User=root`, `WorkingDirectory=/root/cyber-range`,
+  `ExecStart=/root/.local/bin/claude remote-control`, `Restart=always`),
+  enabled + running. Two gotchas hit getting there:
+  - **Workspace trust** blocks `remote-control` on a directory that's never
+    been interactively approved (`Error: Workspace not trusted`), and running
+    `claude` non-interactively (even via a pty, `--print` mode) did **not**
+    persist trust — confirmed via `/root/.claude.json`'s
+    `projects."/root/cyber-range".hasTrustDialogAccepted`, which stayed
+    `false` despite a working `--print` response. Fixed by setting that flag
+    `true` directly in the JSON — a one-time edit of Claude Code's own "do you
+    trust this directory" flag on a directory this same setup provisioned,
+    not a security boundary being bypassed.
+  - Not a daemon by design — `remote-control` is a plain foreground process,
+    hence the systemd wrapper. `--continue` (to reattach the same session
+    across a systemd restart, instead of silently starting a new one) was
+    deliberately **left out** of `ExecStart` — its behavior with zero prior
+    sessions isn't documented, and restart-continuity wasn't tested. Bare
+    `claude remote-control` creates a session if none exists, which covers
+    today's need; revisit `--continue` if losing the paired session across a
+    crash/reboot turns out to matter.
+
+### Proxmox host given a direct IP on every lab SDN network (2026-09-01)
+
+Discovered while testing the above: **the Proxmox host itself had no network
+route to any of the lab's SDN vnets** (`ad`, `offense`, `demo`, `attacker`,
+`services`, `cptc11`) — its route table only carried its management network
+(`192.168.192.0/24`) and a NetBird tunnel (`wt0`) not configured to carry lab
+routes. This control host reaches those subnets via NetBird; Proxmox itself,
+despite hosting every VM on them, did not. Root cause: these are Proxmox SDN
+"simple zone" vnets (`/etc/pve/sdn/{zones,vnets,subnets}.cfg`, zone `lab`) —
+bridges with `bridge_ports none` and no address, so the hypervisor has L2
+presence but no IP unless a subnet's `gateway` field is set (which
+auto-assigns that IP to the node's bridge on SDN apply; another team's
+`lucas` zone/vnet already used this same pattern).
+
+Fixed by adding a `gateway` line to each relevant subnet in
+`/etc/pve/sdn/subnets.cfg` (no `dhcp-range`/`snat` — just a node-side
+address, not routing/NAT) and applying with `pvesh set /cluster/sdn`:
+
+| Vnet | Subnet | Proxmox's new IP | Notes |
+|---|---|---|---|
+| `ad` | 10.0.2.0/24 | 10.0.2.254 | this project's AD range |
+| `offense` | 192.168.0.0/24 | 192.168.0.254 | sysreptor/nessus/bloodhound |
+| `demo` | 10.1.1.0/24 | 10.1.1.253 | `.254` already used by pfSense's own gateway interface there |
+| `attacker` | 192.168.1.0/24 | 192.168.1.254 | student attacker/testing VMs |
+| `services` | 10.0.1.0/24 | 10.0.1.254 | another team's VMs, not this project's |
+| `cptc11` | 10.0.3.0/24 | 10.0.3.254 | another team's VMs — **not** the AD range despite the similar `10.0.x.0/24` numbering; easy to confuse with `ad` (10.0.2.0/24), which is what this actually is |
+
+All six verified reachable post-apply via ARP resolution (`ip neigh`) and/or
+a live TCP connect; plain ICMP ping was unreliable on its own (several
+Windows targets and pfSense itself didn't answer pings despite being fully
+reachable at L2/L3 — Windows Firewall's default ICMP block, most likely). No
+IP conflicts encountered. `services` and `cptc11` are outside this project's
+own scope (other teams' VMs on the same shared Proxmox host) — added only
+because explicitly requested.
