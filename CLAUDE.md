@@ -1181,3 +1181,77 @@ reachable at L2/L3 — Windows Firewall's default ICMP block, most likely). No
 IP conflicts encountered. `services` and `cptc11` are outside this project's
 own scope (other teams' VMs on the same shared Proxmox host) — added only
 because explicitly requested.
+
+### Permissions allowlist and Ansible on the Remote Control instance (2026-09-01)
+
+The Remote Control instance can't use `bypassPermissions` mode (Remote Control
+sessions only support Manual/Accept Edits/Plan — a full bypass flag is
+reportedly ignored for that entry point). Instead, gave it a permissions
+**allowlist** so routine project commands don't prompt: created
+`/root/cyber-range/.claude/settings.local.json` (gitignored — added
+`.claude/settings.local.json` to `.gitignore`, so this stays local to the
+Proxmox box and never syncs to the public repo) with `permissions.allow` for
+`qm`, `pvesh`, `pveum`, `pct`, `pvesm`, `zfs`, `zpool` (Proxmox/storage),
+`ansible`/`ansible-playbook`/`ansible-inventory`/`ansible-vault`/
+`ansible-galaxy`, `ssh`/`scp`/`sftp`, and `git`/`gh`. **Note this is broad,
+not scoped to safe subcommands** — e.g. `Bash(qm *)` also covers `qm destroy`
+and `Bash(zfs *)` covers `zfs destroy` with no prompt, on a host that runs
+other teams' VMs too. Add explicit `deny` entries on top if that turns out to
+be too permissive in practice. `claude-remote-control.service` was restarted
+after this to pick up the new permissions (settings are read at session
+start, so an already-running session wouldn't see them otherwise).
+
+**Ansible installed on the Proxmox host itself** (previously only set up on
+the Windows control host's Kali WSL2, see the Control host section) — same
+`apt-get install -y pipx ansible` pattern, pulled in `python3-winrm`
+automatically. Confirmed: **Ansible core 2.19.4**, Python 3.13.5 (Debian 13
+trixie's own repo versions — newer than WSL2 Kali's 2.20.3/3.13.12 pairing,
+just whatever each distro currently ships). `python3-winrm` imports cleanly.
+**Vault password copied to Proxmox too (2026-09-01, same day, user's call):**
+initially found missing (`ansible-inventory` failed: "vault password file
+`/root/.ansible-secrets/cyberrange_vault_pass` was not found") since that
+file had deliberately been kept only on the Kali WSL control node (see the
+inventory note in the "Post-build cleanup" section above). User explicitly
+asked to widen that boundary to this second host. Copied via a direct
+`wsl cat ... | ssh ... "cat > ..."` pipe (password never displayed in the
+session/transcript, never touched this Windows host's own disk) to the same
+path, `/root/.ansible-secrets/cyberrange_vault_pass` on Proxmox, `install -d
+-m 700`/`chmod 600` to match the WSL side's permissions. Byte count matched
+source (45 bytes) both sides. **Gotcha:** Git Bash's automatic POSIX-path
+conversion mangled the leading `/root/...` argument to `wsl.exe` into a
+Windows path before WSL ever saw it (silently — the `cat` failed inside WSL,
+but the outer pipe still "succeeded" and wrote an empty file remotely, so
+the first attempt looked fine until byte counts were checked). Fixed with
+`MSYS_NO_PATHCONV=1` on the `wsl` invocation. Re-verified after the fix:
+`ansible-inventory` against this repo's inventory now parses cleanly and
+decrypts the vault on Proxmox too.
+
+**Push notifications enabled (2026-09-01, same day)** so approvals for
+anything *not* on the allowlist above (e.g. installing a brand-new tool) can
+actually be seen and approved from the phone/web Remote Control clients, not
+just missed. Created `/root/.claude/settings.json` (root's global/user-scope
+settings on Proxmox, not project-scoped since this concerns the account/app
+notification behavior, not this repo specifically) with
+`inputNeededNotifEnabled: true` (push when a permission prompt or question is
+waiting) and `agentPushNotifEnabled: true` (let Claude also push proactively,
+e.g. to ask about installing something it thinks it needs). No change was
+needed to actually *allow* installing new tools — nothing in this instance's
+settings restricts Bash or blocks arbitrary commands; anything outside the
+`.claude/settings.local.json` allowlist above already prompts for approval
+by default, and Remote Control doesn't support `bypassPermissions` mode
+regardless (see the earlier section on that). Service restarted to pick up
+the new settings.
+
+**Basic Linux commands allowlisted too (2026-09-01, same day)** — extended
+`/root/cyber-range/.claude/settings.local.json` (now 65 rules) with common
+read-only/navigational/informational commands so routine exploration doesn't
+prompt: `ls`, `cd`, `pwd`, `cat`, `less`/`more`, `head`/`tail`, `grep`/
+`egrep`/`fgrep`, `find`/`locate`, `whoami`, `id`, `uname`, `df`, `du`, `free`,
+`ps`, `top`/`htop`, `echo`, `which`/`whereis`, `file`, `wc`, `sort`, `uniq`,
+`cut`, `awk`, `sed`, `diff`, `tree`, `date`, `uptime`, `hostname`, `env`/
+`printenv`, `man`, `history`, `mkdir`, `touch`, `ip`, `ping`, `dig`/
+`nslookup`, `jq`. Deliberately **left off** anything destructive/mutating
+beyond simple file creation — no `rm`, `mv`, `cp`, `chmod`, `chown`, `kill`,
+`dd`, `systemctl stop`/`restart`/`disable`, `shutdown`/`reboot`, or package
+removal (`apt remove`/`purge`) — those still prompt, same as any other
+not-allowlisted command. Service restarted again to pick up the change.

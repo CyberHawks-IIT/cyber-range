@@ -433,6 +433,7 @@
       <a href="#access">Access</a>
       <a href="#support-tools">Support Tools</a>
       <a href="#serviceabuse">Service Abuse</a>
+      <a href="#privesc">Host Privesc</a>
       <a href="#delegation">Delegation</a>
       <a href="#aclabuse">ACL Abuse</a>
       <a href="#credexposure">Cred Exposure</a>
@@ -442,7 +443,6 @@
       <a href="#web">Web</a>
       <a href="#adcs">ADCS</a>
       <a href="#workstation">Workstation</a>
-      <a href="#privesc">Host Privesc</a>
       <a href="#notes">Notes</a>
     </nav>
   </div>
@@ -519,7 +519,7 @@
         <div class="k">Service abuse box - SSH</div>
         <div class="credrow"><span class="label">Host</span><span class="val">10.1.1.1</span></div>
         <div class="credrow"><span class="label">Login</span><span class="val">user / password</span></div>
-        <div class="desc">Low-privilege starting point for the Linux host-privilege-escalation findings below. A separate local account on this standalone box, unrelated to the domain <span class="mono">user</span> account above - same credential pattern, different host. Distinct from the guessable <span class="mono">administrator</span>/<span class="mono">password</span> account under Service Abuse Practice.</div>
+        <div class="desc">Low-privilege starting point for the Linux host-privilege-escalation findings below. A separate local account on this standalone box, unrelated to the domain <span class="mono">user</span> account above - same credential pattern, different host. Distinct from the guessable account under Service Abuse Practice, which you're meant to find on your own.</div>
       </div>
     </div>
   </section>
@@ -573,6 +573,46 @@
       </table>
     </div>
     <p class="section-note">SSH and Telnet share the same guessable account, drawn from SecLists' <span class="mono">ssh-betterdefaultpasslist</span>.</p>
+  </section>
+
+  <section id="privesc">
+    <div class="section-head"><h2>Host Privilege Escalation</h2><span class="section-count">9 Windows + 8 Linux</span></div>
+    <p class="section-note">Local-host escalation practice, independent of the AD-wide findings above. Windows findings start from <span class="mono">user</span>'s RDP/WinRM access to <b>workstation</b> (<span class="mono">10.0.2.8</span>) (see Starter Access); Linux findings start from the dedicated <span class="mono">user</span> account on the service-abuse box (<span class="mono">10.1.1.1</span>) - a separate local account from the domain <span class="mono">user</span> above.</p>
+
+    <div class="subhead"><span class="swatch"></span>Windows - workstation (10.0.2.8)</div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th style="width:34%">Finding</th><th>Target</th></tr></thead>
+        <tbody>
+          <tr><td class="finding">SeImpersonatePrivilege granted directly to the low-priv user</td><td class="target">local token (Potato-style)</td></tr>
+          <tr><td class="finding">Cleartext admin password in PowerShell (PSReadLine) history</td><td class="target mono">WORKSTATION\Administrator</td></tr>
+          <tr><td class="finding">Writable service binary + restart rights</td><td class="target mono">WorkstationHealthMonitor</td></tr>
+          <tr><td class="finding">Writable service config (<span class="mono">sc config</span>) + restart rights</td><td class="target mono">WorkstationBackupAgent</td></tr>
+          <tr><td class="finding">Unquoted service path, writable intermediate folder</td><td class="target mono">WorkstationDeploySvc</td></tr>
+          <tr><td class="finding">DLL search-order hijack (missing DLL in app dir)</td><td class="target mono">WorkstationReportSvc</td></tr>
+          <tr><td class="finding">Writable script behind a SYSTEM scheduled task</td><td class="target mono">CyberHawksMaintenance</td></tr>
+          <tr><td class="finding">AlwaysInstallElevated (HKLM + HKCU) - MSI runs as SYSTEM</td><td class="target">any attacker-supplied MSI</td></tr>
+          <tr><td class="finding">Autologon credentials readable in the registry</td><td class="target mono">WORKSTATION\Administrator</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="subhead alt"><span class="swatch"></span>Linux - demo (10.1.1.1)</div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th style="width:34%">Finding</th><th>Target</th></tr></thead>
+        <tbody>
+          <tr><td class="finding">sudo NOPASSWD on a GTFOBins binary</td><td class="target mono">/usr/bin/less</td></tr>
+          <tr><td class="finding">SUID bit on a GTFOBins binary</td><td class="target mono">/usr/local/bin/sysfind (find)</td></tr>
+          <tr><td class="finding">Linux capability (cap_setuid) on a GTFOBins binary</td><td class="target mono">/usr/local/bin/perl5-legacy (perl)</td></tr>
+          <tr><td class="finding">sudo <span class="mono">env_keep+=LD_PRELOAD</span> on a permitted binary</td><td class="target mono">/usr/local/bin/sysdiag</td></tr>
+          <tr><td class="finding">Cron job with wildcard argument injection (tar)</td><td class="target mono">/opt/backups</td></tr>
+          <tr><td class="finding">Cron job resolving a script via a writable PATH dir</td><td class="target mono">/opt/scripts (generate-report.sh)</td></tr>
+          <tr><td class="finding">systemd timer running a user-writable script</td><td class="target mono">cyberhawks-cleanup.{service,timer}</td></tr>
+          <tr><td class="finding">Docker group membership (container escape)</td><td class="target">host root, via a mounted volume</td></tr>
+        </tbody>
+      </table>
+    </div>
   </section>
 
   <section id="delegation">
@@ -723,46 +763,6 @@
         <tbody>
           <tr><td class="finding">WebClient (WebDAV) coercion trigger</td><td class="who">unauthenticated, over the network</td><td class="target mono">workstation</td></tr>
           <tr><td class="finding">NTLM reflection to local SYSTEM</td><td class="who">unauthenticated, over the network</td><td class="target mono">workstation</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </section>
-
-  <section id="privesc">
-    <div class="section-head"><h2>Host Privilege Escalation</h2><span class="section-count">9 Windows + 8 Linux</span></div>
-    <p class="section-note">Local-host escalation practice, independent of the AD-wide findings above. Windows findings start from <span class="mono">user</span>'s RDP/WinRM access to <b>workstation</b> (see Starter Access); Linux findings start from the dedicated <span class="mono">user</span> account on the service-abuse box (<span class="mono">10.1.1.1</span>) - a separate local account from the domain <span class="mono">user</span> above.</p>
-
-    <div class="subhead"><span class="swatch"></span>Windows - workstation</div>
-    <div class="tablewrap">
-      <table>
-        <thead><tr><th style="width:34%">Finding</th><th>Target</th></tr></thead>
-        <tbody>
-          <tr><td class="finding">SeImpersonatePrivilege granted directly to the low-priv user</td><td class="target">local token (Potato-style)</td></tr>
-          <tr><td class="finding">Cleartext admin password in PowerShell (PSReadLine) history</td><td class="target mono">WORKSTATION\Administrator</td></tr>
-          <tr><td class="finding">Writable service binary + restart rights</td><td class="target mono">WorkstationHealthMonitor</td></tr>
-          <tr><td class="finding">Writable service config (<span class="mono">sc config</span>) + restart rights</td><td class="target mono">WorkstationBackupAgent</td></tr>
-          <tr><td class="finding">Unquoted service path, writable intermediate folder</td><td class="target mono">WorkstationDeploySvc</td></tr>
-          <tr><td class="finding">DLL search-order hijack (missing DLL in app dir)</td><td class="target mono">WorkstationReportSvc</td></tr>
-          <tr><td class="finding">Writable script behind a SYSTEM scheduled task</td><td class="target mono">CyberHawksMaintenance</td></tr>
-          <tr><td class="finding">AlwaysInstallElevated (HKLM + HKCU) - MSI runs as SYSTEM</td><td class="target">any attacker-supplied MSI</td></tr>
-          <tr><td class="finding">Autologon credentials readable in the registry</td><td class="target mono">WORKSTATION\Administrator</td></tr>
-        </tbody>
-      </table>
-    </div>
-
-    <div class="subhead alt"><span class="swatch"></span>Linux - demo (10.1.1.1)</div>
-    <div class="tablewrap">
-      <table>
-        <thead><tr><th style="width:34%">Finding</th><th>Target</th></tr></thead>
-        <tbody>
-          <tr><td class="finding">sudo NOPASSWD on a GTFOBins binary</td><td class="target mono">/usr/bin/less</td></tr>
-          <tr><td class="finding">SUID bit on a GTFOBins binary</td><td class="target mono">/usr/local/bin/sysfind (find)</td></tr>
-          <tr><td class="finding">Linux capability (cap_setuid) on a GTFOBins binary</td><td class="target mono">/usr/local/bin/perl5-legacy (perl)</td></tr>
-          <tr><td class="finding">sudo <span class="mono">env_keep+=LD_PRELOAD</span> on a permitted binary</td><td class="target mono">/usr/local/bin/sysdiag</td></tr>
-          <tr><td class="finding">Cron job with wildcard argument injection (tar)</td><td class="target mono">/opt/backups</td></tr>
-          <tr><td class="finding">Cron job resolving a script via a writable PATH dir</td><td class="target mono">/opt/scripts (generate-report.sh)</td></tr>
-          <tr><td class="finding">systemd timer running a user-writable script</td><td class="target mono">cyberhawks-cleanup.{service,timer}</td></tr>
-          <tr><td class="finding">Docker group membership (container escape)</td><td class="target">host root, via a mounted volume</td></tr>
         </tbody>
       </table>
     </div>
