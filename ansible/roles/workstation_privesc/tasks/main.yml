@@ -1,0 +1,22 @@
+---
+# Runs against workstation. Grants the low-priv domain "user" account RDP +
+# non-admin WinRM access, then bakes in the host-privilege-escalation
+# findings documented in CLAUDE.md's "Host privilege escalation" section.
+- name: Upload workstation privesc setup script
+  ansible.windows.win_copy:
+    src: setup_workstation_privesc.ps1
+    dest: "C:\\Windows\\Temp\\setup_workstation_privesc.ps1"
+
+- name: Apply workstation privesc setup
+  ansible.windows.win_shell: "C:\\Windows\\Temp\\setup_workstation_privesc.ps1"
+  register: privesc_result
+  changed_when: true
+
+- name: Show workstation privesc setup result
+  ansible.builtin.debug:
+    var: privesc_result.stdout_lines
+
+- name: Remove temp script
+  ansible.windows.win_file:
+    path: "C:\\Windows\\Temp\\setup_workstation_privesc.ps1"
+    state: absent

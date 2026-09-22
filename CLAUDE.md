@@ -943,6 +943,150 @@ Every finding above was verified live end-to-end (not just "the config file
 says so") except TFTP's full client round-trip, flagged as a control-host
 network-path artifact rather than an assumed failure.
 
+**Pre-existing, undocumented finding spotted but not touched (2026-09-22):**
+`/usr/bin/bash.copy` on this host is SUID root. Not part of any documented
+finding here and not something this session added — flagging it for
+whoever looks next rather than silently removing or claiming it.
+
+## Host privilege escalation practice (built 2026-09-22)
+
+Local/host-level escalation findings, layered on top of the existing AD
+range and service-abuse box rather than a new host. Two independent tracks:
+
+**Windows — workstation.** The starter domain account `user` (password
+`password`, same account documented under Starter Access elsewhere in this
+file) was granted RDP and non-admin WinRM access to `workstation` — explicitly
+*not* local admin there (verified: not a member of `Administrators`).
+Getting WinRM working for a non-admin domain account took two separate
+grants, not just group membership:
+- `Add-LocalGroupMember -Group 'Remote Desktop Users'` for RDP.
+- `Add-LocalGroupMember -Group 'Remote Management Users'` (SID `S-1-5-32-580`)
+  for WinRM — necessary but **not sufficient** on its own. The WinRM
+  service's own `WSMan:\localhost\Service\RootSDDL` only grants
+  `BUILTIN\Administrators` and `NT AUTHORITY\INTERACTIVE` by default; that
+  governs the raw WinRS shell (`ansible.windows.win_shell`/`win_command`,
+  and `winrm.exe`/`pywinrm` "cmd" sessions), separately from the
+  `microsoft.powershell` **session configuration**'s own permission list
+  (`Get-PSSessionConfiguration`), which *does* already include Remote
+  Management Users out of the box. Symptom without the RootSDDL fix:
+  WinRM auth succeeds (no 401) but opening a shell fails with
+  `WSManFaultError: Access is denied` (HTTP 500). Fixed by adding an
+  explicit ACE for that SID to RootSDDL
+  (`(A;;GA;;;S-1-5-32-580)` inserted after the SDDL's `D:P`).
+
+Nine findings target this account, built via the new `workstation_privesc`
+Ansible role (`ansible/roles/workstation_privesc/`, Phase P, tag
+`host_privesc` in `ansible/playbooks/vulnerable-range.yml`):
+
+| Finding | Target |
+|---|---|
+| `SeImpersonatePrivilege` granted directly (secedit) | `user`'s own logon token — Potato-style local privesc |
+| Cleartext local-admin password in PowerShell (PSReadLine) history | `WORKSTATION\Administrator` (`S@lcianaszkot23`, the shared local-admin password already documented above) |
+| Writable service binary + SC-level start/stop rights | `WorkstationHealthMonitor` |
+| Writable service config (`sc config`) + start/stop rights | `WorkstationBackupAgent` |
+| Unquoted service path with a writable intermediate folder | `WorkstationDeploySvc` (`C:\Program Files\Vulnerable Service\...`) |
+| DLL search-order hijack (missing DLL loaded by bare name) | `WorkstationReportSvc` (`C:\Apps\ReportTool`, missing `wkstnutil.dll`) |
+| Writable script behind a SYSTEM scheduled task (5-min timer) | `CyberHawksMaintenance` → `C:\ProgramData\CyberHawks\Maintenance\cleanup.ps1` |
+| `AlwaysInstallElevated` set in both HKLM and HKCU | any attacker-supplied MSI installs as SYSTEM |
+| Autologon credentials in the registry (readable by any user) | `WORKSTATION\Administrator` |
+
+Gotchas hit building this (all fixed, see the role's script for the final
+form):
+- **`Write-Progress` output from pipelined cmdlets (`Enable-NetFirewallRule`)
+  corrupts the CLIXML stream** ansible's `win_shell` parses, causing a
+  `EXCEPTION PARSING CLIXML` failure that looks like the script itself
+  crashed. Fixed with `$ProgressPreference = 'SilentlyContinue'` at the top
+  of the script — unrelated to whether the underlying PowerShell actually
+  succeeded (it had).
+- **Domain users can't `schtasks /RU <user> /RP <password>` by default** —
+  needed to bootstrap `user`'s profile (so `PSReadLine`/`NTUSER.DAT` exist to
+  write into) via a one-shot scheduled task, but plain domain users lack
+  "Log on as a batch job" (`SeBatchLogonRight`) on a workstation by default,
+  failing with "Batch logon privilege needs to be enabled for the task
+  principal." Fixed by granting that right temporarily (secedit, same
+  mechanism as the `SeImpersonatePrivilege` grant) just long enough to run
+  the bootstrap task, then revoking it again — it's not one of the intended
+  findings, so it shouldn't linger.
+- **`sc.exe start`/`sc.exe query` need `SERVICE_QUERY_STATUS` (`LC`) in
+  addition to `SERVICE_START`/`SERVICE_STOP` (`RP`/`WP`)** — granting only
+  `RPWP` let the low-priv user `sc stop` a service (got as far as
+  `ControlService`, then a benign "not started" state error) but `sc start`
+  failed at the earlier `OpenService` step with `Access is denied`, because
+  `sc.exe`'s own implementation opens the handle requesting the combined
+  access set up front, all-or-nothing. Fixed by granting `RPWPLC` (or
+  `DCRPWPLC` for the config-write service) instead.
+- **`New-ScheduledTaskTrigger -Once (Get-Date)`** is invalid syntax (`-Once`
+  is a switch, the timestamp needs `-At`); separately, **`-RepetitionDuration
+  ([TimeSpan]::MaxValue)`** fails Task Scheduler's own XML validation
+  (`P99999999DT23H59M59S` out of range) — used `-Once -At (Get-Date)
+  -RepetitionDuration (New-TimeSpan -Days 3650)` instead.
+
+**Linux — demo (10.1.1.1).** Checked first whether any of the requested
+primitives already existed on this box (sudoers, SUID, capabilities, root
+crontab, systemd timers, docker) — none did; all eight below are new. Built
+via a new plain-bash script rather than Ansible
+(`scripts/demo_privesc_setup.sh`, idempotent, run over SSH as root the same
+way this box's original service-abuse findings were set up — there's no
+existing Ansible inventory entry for this host). A dedicated low-priv
+account, `analyst`/`analyst123`, was created as the starting point —
+deliberately distinct from the `administrator`/`password` account, which
+stays a "find by guessing" service-abuse finding rather than being handed
+out directly.
+
+| Finding | Target |
+|---|---|
+| sudo NOPASSWD on a specific GTFOBins binary | `/usr/bin/less` |
+| SUID bit on a GTFOBins binary (via a dedicated copy, not the system binary) | `/usr/local/bin/sysfind` (copy of `find`) |
+| Linux capability `cap_setuid+ep` on a GTFOBins binary (dedicated copy) | `/usr/local/bin/perl5-legacy` (copy of `perl`) |
+| sudo `env_keep+=LD_PRELOAD` + NOPASSWD on a custom permitted binary | `/usr/local/bin/sysdiag` |
+| Cron job with wildcard argument injection (`tar czf ... *`) | `/opt/backups`, owned by `analyst`, root cron every 5 min |
+| Cron job resolving a bare-name script via a writable PATH directory | `/opt/scripts` (first on `PATH`), root cron every 5 min, looks for `generate-report.sh` |
+| systemd service + timer running a user-writable script | `cyberhawks-cleanup.service`/`.timer` → `/opt/maintenance/cleanup.sh` (owned by `analyst`), every 5 min |
+| `docker` group membership (container escape to host root) | mount `/` into a container, `chroot` |
+
+Copies rather than the system binaries themselves were used for the SUID and
+capability findings (`sysfind`, `perl5-legacy`) so the real `/usr/bin/find`
+and `/usr/bin/perl` stay untouched for anything else on the box that might
+shell out to them.
+
+Every finding above was verified live end-to-end as `analyst`: SUID/capability
+binaries confirmed reaching `euid=0`/`uid=0`, the sudo rules confirmed via
+`sudo -l` plus an actual `sudo less` GTFOBins escape, the cron jobs confirmed
+firing as root via `journalctl -u cron` (both show up every 5 minutes;
+`generate-report.sh` currently fails harmlessly since it doesn't exist yet —
+that's the point), the systemd timer confirmed via
+`systemctl list-timers`/its own log file, and docker confirmed reachable
+(`docker version` succeeds as `analyst`).
+
+**Gotcha hit verifying the LD_PRELOAD finding — a real fork bomb, not a
+config bug:** the first test payload's constructor called `system("id > ...
+")` while `LD_PRELOAD` was still set in the environment; `system()` forks a
+shell, which inherits `LD_PRELOAD`, which reloads the same `.so`, whose
+constructor calls `system()` again — unbounded recursive forking. Process
+count on the VM hit ~10,300 before `nproc` limits capped it; load average
+spiked but memory stayed fine and the box self-stabilized rather than
+crashing. Recovered via `qm guest exec 910` (the QEMU guest agent — SSH
+itself was failing under the load) running `pkill -9 -f`, with one subtlety:
+a `pkill -f '<pattern>'` whose pattern is itself passed as a literal
+substring will match **its own** command line and self-kill before finishing
+uselessly; worked around by breaking up the literal string with a
+single-character bracket expression (`ldpreload_pro[o]f.txt` instead of
+`ldpreload_proof.txt`) so the regex still matches the target processes but
+not pkill's own argv. Fixed the actual payload by never calling `system()`/
+`exec()` from an `LD_PRELOAD` constructor without first dropping the
+variable — real GTFOBins-style payloads for this technique do this for
+exactly this reason. The finding/sudoers config itself was never the
+problem, only the verification payload. No lasting damage to the demo VM
+(910) — confirmed process count and load back to baseline after cleanup.
+
+**Also caught in the same verification pass:** the wildcard-cron finding's
+`/etc/cron.d` entry used an unescaped `%` in `` $(date +%s) `` — cron
+folds a bare `%` into a newline (treating the remainder as the command's
+stdin) unless escaped, so the job was silently running as
+`tar -czf /root/backup-$(date +).tar.gz` instead. Fixed by escaping it
+(`+\%s`) in `scripts/demo_privesc_setup.sh`; confirmed via
+`journalctl -u cron` that the corrected command line runs intact.
+
 ## GitHub
 
 Repos: `CyberHawks-IIT/cyber-range` and `CyberHawks-IIT/AttackerVMs` — both

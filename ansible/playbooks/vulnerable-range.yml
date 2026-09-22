@@ -274,3 +274,10 @@
   tags: [dns_zone_transfer]
   roles:
     - dns_zone_transfer
+
+- name: Phase P - Windows host privilege escalation findings on workstation
+  hosts: workstation
+  gather_facts: false
+  tags: [host_privesc]
+  roles:
+    - workstation_privesc
