@@ -1028,10 +1028,15 @@ via a new plain-bash script rather than Ansible
 (`scripts/demo_privesc_setup.sh`, idempotent, run over SSH as root the same
 way this box's original service-abuse findings were set up — there's no
 existing Ansible inventory entry for this host). A dedicated low-priv
-account, `analyst`/`analyst123`, was created as the starting point —
-deliberately distinct from the `administrator`/`password` account, which
-stays a "find by guessing" service-abuse finding rather than being handed
-out directly.
+account, `user`/`password` (a separate local account from the domain
+`user`, unrelated — just the same naming/credential pattern reused on this
+standalone box), was created as the starting point — renamed from an
+earlier `analyst`/`analyst123` per the user's preference, at the user's
+request in a follow-up to the original build (`usermod -l`/`groupmod -n`,
+sudoers files and `/etc/subuid`/`/etc/subgid` updated to match, verified
+still fully exploitable afterward). Deliberately distinct from the
+`administrator`/`password` account, which stays a "find by guessing"
+service-abuse finding rather than being handed out directly.
 
 | Finding | Target |
 |---|---|
@@ -1039,9 +1044,9 @@ out directly.
 | SUID bit on a GTFOBins binary (via a dedicated copy, not the system binary) | `/usr/local/bin/sysfind` (copy of `find`) |
 | Linux capability `cap_setuid+ep` on a GTFOBins binary (dedicated copy) | `/usr/local/bin/perl5-legacy` (copy of `perl`) |
 | sudo `env_keep+=LD_PRELOAD` + NOPASSWD on a custom permitted binary | `/usr/local/bin/sysdiag` |
-| Cron job with wildcard argument injection (`tar czf ... *`) | `/opt/backups`, owned by `analyst`, root cron every 5 min |
+| Cron job with wildcard argument injection (`tar czf ... *`) | `/opt/backups`, owned by `user`, root cron every 5 min |
 | Cron job resolving a bare-name script via a writable PATH directory | `/opt/scripts` (first on `PATH`), root cron every 5 min, looks for `generate-report.sh` |
-| systemd service + timer running a user-writable script | `cyberhawks-cleanup.service`/`.timer` → `/opt/maintenance/cleanup.sh` (owned by `analyst`), every 5 min |
+| systemd service + timer running a user-writable script | `cyberhawks-cleanup.service`/`.timer` → `/opt/maintenance/cleanup.sh` (owned by `user`), every 5 min |
 | `docker` group membership (container escape to host root) | mount `/` into a container, `chroot` |
 
 Copies rather than the system binaries themselves were used for the SUID and
@@ -1049,14 +1054,14 @@ capability findings (`sysfind`, `perl5-legacy`) so the real `/usr/bin/find`
 and `/usr/bin/perl` stay untouched for anything else on the box that might
 shell out to them.
 
-Every finding above was verified live end-to-end as `analyst`: SUID/capability
+Every finding above was verified live end-to-end as `user`: SUID/capability
 binaries confirmed reaching `euid=0`/`uid=0`, the sudo rules confirmed via
 `sudo -l` plus an actual `sudo less` GTFOBins escape, the cron jobs confirmed
 firing as root via `journalctl -u cron` (both show up every 5 minutes;
 `generate-report.sh` currently fails harmlessly since it doesn't exist yet —
 that's the point), the systemd timer confirmed via
 `systemctl list-timers`/its own log file, and docker confirmed reachable
-(`docker version` succeeds as `analyst`).
+(`docker version` succeeds as `user`).
 
 **Gotcha hit verifying the LD_PRELOAD finding — a real fork bomb, not a
 config bug:** the first test payload's constructor called `system("id > ...

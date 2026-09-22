@@ -1,27 +1,27 @@
 #!/bin/bash
 # Bakes host-privilege-escalation findings into the "demo" service-abuse box
-# (10.1.1.1) for a dedicated low-priv "analyst" account. Idempotent - safe
+# (10.1.1.1) for a dedicated low-priv "user" account. Idempotent - safe
 # to re-run. Run as root on the demo box itself (via SSH).
 set -euo pipefail
 
-ANALYST_USER='analyst'
-ANALYST_PW='analyst123'
+DEMO_USER='user'
+DEMO_PW='password'
 
-echo "=== Low-priv analyst account ==="
-if ! id "$ANALYST_USER" &>/dev/null; then
-    useradd -m -s /bin/bash "$ANALYST_USER"
-    echo "${ANALYST_USER}:${ANALYST_PW}" | chpasswd
-    echo "Created $ANALYST_USER"
+echo "=== Low-priv user account ==="
+if ! id "$DEMO_USER" &>/dev/null; then
+    useradd -m -s /bin/bash "$DEMO_USER"
+    echo "${DEMO_USER}:${DEMO_PW}" | chpasswd
+    echo "Created $DEMO_USER"
 else
-    echo "$ANALYST_USER already exists"
+    echo "$DEMO_USER already exists"
 fi
 
 echo "=== sudo to a specific GTFOBins binary (less) ==="
-cat > /etc/sudoers.d/cyberhawks-analyst-less <<'EOF'
-analyst ALL=(root) NOPASSWD: /usr/bin/less
+cat > /etc/sudoers.d/cyberhawks-user-less <<'EOF'
+user ALL=(root) NOPASSWD: /usr/bin/less
 EOF
-chmod 440 /etc/sudoers.d/cyberhawks-analyst-less
-visudo -cf /etc/sudoers.d/cyberhawks-analyst-less
+chmod 440 /etc/sudoers.d/cyberhawks-user-less
+visudo -cf /etc/sudoers.d/cyberhawks-user-less
 echo "sudo rule for /usr/bin/less installed"
 
 echo "=== SUID on a GTFOBins binary (find, via a dedicated copy) ==="
@@ -48,17 +48,17 @@ EOF
     chmod 755 /usr/local/bin/sysdiag
     chown root:root /usr/local/bin/sysdiag
 fi
-cat > /etc/sudoers.d/cyberhawks-analyst-ldpreload <<'EOF'
-Defaults:analyst env_keep += "LD_PRELOAD"
-analyst ALL=(root) NOPASSWD: /usr/local/bin/sysdiag
+cat > /etc/sudoers.d/cyberhawks-user-ldpreload <<'EOF'
+Defaults:user env_keep += "LD_PRELOAD"
+user ALL=(root) NOPASSWD: /usr/local/bin/sysdiag
 EOF
-chmod 440 /etc/sudoers.d/cyberhawks-analyst-ldpreload
-visudo -cf /etc/sudoers.d/cyberhawks-analyst-ldpreload
+chmod 440 /etc/sudoers.d/cyberhawks-user-ldpreload
+visudo -cf /etc/sudoers.d/cyberhawks-user-ldpreload
 echo "sudo LD_PRELOAD rule installed"
 
 echo "=== cron job with wildcard (tar) ==="
 mkdir -p /opt/backups
-chown "${ANALYST_USER}:${ANALYST_USER}" /opt/backups
+chown "${DEMO_USER}:${DEMO_USER}" /opt/backups
 chmod 755 /opt/backups
 cat > /etc/cron.d/cyberhawks-backup <<'EOF'
 */5 * * * * root cd /opt/backups && tar -czf /root/backup-$(date +\%s).tar.gz * 2>/dev/null
@@ -68,7 +68,7 @@ echo "wildcard cron job installed (/opt/backups, every 5 min as root)"
 
 echo "=== cron job relying on a writable PATH directory ==="
 mkdir -p /opt/scripts
-chown "${ANALYST_USER}:${ANALYST_USER}" /opt/scripts
+chown "${DEMO_USER}:${DEMO_USER}" /opt/scripts
 chmod 755 /opt/scripts
 cat > /etc/cron.d/cyberhawks-report <<'EOF'
 PATH=/opt/scripts:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
@@ -85,7 +85,7 @@ if [ ! -f /opt/maintenance/cleanup.sh ]; then
 echo "$(date) - maintenance run" >> /opt/maintenance/cleanup.log
 EOF
 fi
-chown "${ANALYST_USER}:${ANALYST_USER}" /opt/maintenance/cleanup.sh
+chown "${DEMO_USER}:${DEMO_USER}" /opt/maintenance/cleanup.sh
 chmod 755 /opt/maintenance/cleanup.sh
 
 cat > /etc/systemd/system/cyberhawks-cleanup.service <<'EOF'
@@ -112,7 +112,7 @@ EOF
 
 systemctl daemon-reload
 systemctl enable --now cyberhawks-cleanup.timer
-echo "systemd timer cyberhawks-cleanup.timer enabled (script owned by analyst)"
+echo "systemd timer cyberhawks-cleanup.timer enabled (script owned by $DEMO_USER)"
 
 echo "=== Docker group membership (container escape) ==="
 if ! command -v docker &>/dev/null; then
@@ -123,11 +123,11 @@ if ! command -v docker &>/dev/null; then
 else
     echo "docker already installed"
 fi
-if ! id -nG "$ANALYST_USER" | grep -qw docker; then
-    usermod -aG docker "$ANALYST_USER"
-    echo "Added $ANALYST_USER to docker group"
+if ! id -nG "$DEMO_USER" | grep -qw docker; then
+    usermod -aG docker "$DEMO_USER"
+    echo "Added $DEMO_USER to docker group"
 else
-    echo "$ANALYST_USER already in docker group"
+    echo "$DEMO_USER already in docker group"
 fi
 
 echo "=== ALL DONE ==="

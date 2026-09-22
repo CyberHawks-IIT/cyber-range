@@ -518,8 +518,8 @@
       <div class="access-card">
         <div class="k">Service abuse box - SSH</div>
         <div class="credrow"><span class="label">Host</span><span class="val">10.1.1.1</span></div>
-        <div class="credrow"><span class="label">Login</span><span class="val">analyst / analyst123</span></div>
-        <div class="desc">Low-privilege starting point for the Linux host-privilege-escalation findings below. Distinct from the guessable <span class="mono">administrator</span>/<span class="mono">password</span> account under Service Abuse Practice.</div>
+        <div class="credrow"><span class="label">Login</span><span class="val">user / password</span></div>
+        <div class="desc">Low-privilege starting point for the Linux host-privilege-escalation findings below. A separate local account on this standalone box, unrelated to the domain <span class="mono">user</span> account above - same credential pattern, different host. Distinct from the guessable <span class="mono">administrator</span>/<span class="mono">password</span> account under Service Abuse Practice.</div>
       </div>
     </div>
   </section>
@@ -730,7 +730,7 @@
 
   <section id="privesc">
     <div class="section-head"><h2>Host Privilege Escalation</h2><span class="section-count">9 Windows + 8 Linux</span></div>
-    <p class="section-note">Local-host escalation practice, independent of the AD-wide findings above. Windows findings start from <span class="mono">user</span>'s RDP/WinRM access to <b>workstation</b> (see Starter Access); Linux findings start from the dedicated <span class="mono">analyst</span> account on the service-abuse box (<span class="mono">10.1.1.1</span>).</p>
+    <p class="section-note">Local-host escalation practice, independent of the AD-wide findings above. Windows findings start from <span class="mono">user</span>'s RDP/WinRM access to <b>workstation</b> (see Starter Access); Linux findings start from the dedicated <span class="mono">user</span> account on the service-abuse box (<span class="mono">10.1.1.1</span>) - a separate local account from the domain <span class="mono">user</span> above.</p>
 
     <div class="subhead"><span class="swatch"></span>Windows - workstation</div>
     <div class="tablewrap">
