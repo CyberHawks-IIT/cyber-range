@@ -61,10 +61,10 @@ mkdir -p /opt/backups
 chown "${DEMO_USER}:${DEMO_USER}" /opt/backups
 chmod 755 /opt/backups
 cat > /etc/cron.d/cyberhawks-backup <<'EOF'
-*/5 * * * * root cd /opt/backups && tar -czf /root/backup-$(date +\%s).tar.gz * 2>/dev/null
+*/5 * * * * root cd /opt/backups && tar -czf /root/backup.tar.gz * 2>/dev/null
 EOF
 chmod 644 /etc/cron.d/cyberhawks-backup
-echo "wildcard cron job installed (/opt/backups, every 5 min as root)"
+echo "wildcard cron job installed (/opt/backups, every 5 min as root, overwrites /root/backup.tar.gz each run)"
 
 echo "=== cron job relying on a writable PATH directory ==="
 mkdir -p /opt/scripts

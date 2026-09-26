@@ -1092,6 +1092,24 @@ stdin) unless escaped, so the job was silently running as
 (`+\%s`) in `scripts/demo_privesc_setup.sh`; confirmed via
 `journalctl -u cron` that the corrected command line runs intact.
 
+**Wildcard-cron finding fixed to stop hogging disk (2026-09-26):** the
+timestamped filename (`backup-$(date +\%s).tar.gz`) meant every 5-minute run
+left behind a new file forever — 1,195 had piled up in `/root` on the live
+`demo` VM by the time this was caught (4.7MB, small only because
+`/opt/backups` happened to be empty; a real accumulated corpus of exploit
+payloads would be much larger). Changed `scripts/demo_privesc_setup.sh` and
+the live host's `/etc/cron.d/cyberhawks-backup` to a fixed filename
+(`/root/backup.tar.gz`, overwritten each run) — the wildcard argument
+injection vulnerability itself is unchanged, only the runaway-disk-growth
+side effect is gone. The 1,195 stale files on the live VM were deleted and
+the new single-file behavior was verified with a manual trigger. **The same
+"runs forever, appends without bound" pattern also exists on two other
+baked-in privescs** — `cyberhawks-cleanup.{service,timer}` here on `demo`
+and `CyberHawksMaintenance` on `workstation` (both just append one log line
+every 5 minutes, so the growth is negligible by comparison and was left
+as-is per the user's call) — worth the same treatment if it ever becomes
+worth the churn.
+
 ## GitHub
 
 Repos: `CyberHawks-IIT/cyber-range` and `CyberHawks-IIT/AttackerVMs` — both
