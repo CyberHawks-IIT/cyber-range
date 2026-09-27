@@ -1197,10 +1197,10 @@ surfaced, resolved with the user directly rather than guessed at:
   and this project's own NetBird VPN) — none of these had been noticed via
   direct Proxmox inspection alone.
 
-The diagram image itself (`network-diagram.png` or similar) still needs to
-be added to `docs/` by hand — Claude Code has no mechanism to pull an
-inline chat image out onto disk; `docs/network-and-infrastructure.md`
-references it by an assumed filename pending that.
+The diagram image (`docs/network-diagram.jpg`) was added by the user
+directly (2026-09-27, same day) — Claude Code has no mechanism to pull an
+inline chat image out onto disk, so this had to happen by hand.
+`docs/network-and-infrastructure.md` now embeds it.
 
 ## GitHub
 

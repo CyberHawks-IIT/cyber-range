@@ -1,10 +1,11 @@
 # Network and infrastructure layout
 
 The full Proxmox network layout this project runs on, based on the team's
-own network diagram (`network-diagram.png` in this directory — add it here
-if it isn't yet) plus what's actually live on the hypervisor today. For the
-AD domain itself, see the main [README](../README.md) and
+own network diagram below plus what's actually live on the hypervisor
+today. For the AD domain itself, see the main [README](../README.md) and
 [CLAUDE.md](../CLAUDE.md).
+
+![Network diagram](network-diagram.jpg)
 
 ## The shape of it
 
