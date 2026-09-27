@@ -1300,6 +1300,29 @@ for the Configuration/Schema/ForestDnsZones NCs until fixed) — resolved by
 re-running the existing `network_prereqs` role, confirmed via `repadmin
 /replsummary` (0 failures both directions) afterward.
 
+**Confirmed this isn't specific to the rollback** — the same clock-skew/
+replication-failure pattern recurred after the *normal* end-of-session
+power-off→snapshot→power-on cycle for this Phase Q work (both DCs cold-booted
+together for the `detection-logging-v1` snapshot below). Expect this on any
+future cold boot of dc1+dc2 together, not just after a `qm rollback`: rerun
+`ansible-playbook playbooks/vulnerable-range.yml --tags network_prereqs
+--limit dc1,dc2` first, then `repadmin /replsummary` on dc1 to check. If
+`/replsummary` still shows failures after that, `repadmin /syncall /AdeP`
+alone won't always clear the last few NCs (Configuration/Schema/
+ForestDnsZones tend to stick) — force each by name instead:
+`repadmin /replicate DC1 DC2 "<NC distinguished name>"` for each of
+`DC=cyberhawks,DC=lab`, `CN=Configuration,DC=cyberhawks,DC=lab`,
+`CN=Schema,CN=Configuration,DC=cyberhawks,DC=lab`,
+`DC=DomainDnsZones,DC=cyberhawks,DC=lab`, and
+`DC=ForestDnsZones,DC=cyberhawks,DC=lab`.
+
+**Snapshot:** a new Proxmox snapshot `detection-logging-v1` was taken on all
+7 range VMs (320-326) and on `demo` (VMID 910) after this work, following
+the usual power-off→snapshot→power-on process. `qm rollback <vmid>
+detection-logging-v1` restores any of them to this state (Phase Q applied,
+Splunk UF connected, replication healthy — verified post-snapshot-reboot
+per the clock-skew note above).
+
 ## GitHub
 
 Repos: `CyberHawks-IIT/cyber-range`, `CyberHawks-IIT/AttackerVMs`,
