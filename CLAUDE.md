@@ -15,6 +15,14 @@ this file as the running source of truth for project context across sessions.
   out to be more than the user wanted.) Code/Ansible changes are a good
   default trigger to push. Don't feel obligated to push after every small
   CLAUDE.md tweak or in-progress investigation note.
+- **"Make a snapshot" means: power off -> snapshot -> power back on**
+  (established 2026-09-27, working through the defense-tooling monitoring
+  stack). Not a live/online snapshot — the VM or container gets a clean
+  `qm shutdown`/`pct shutdown` first, the snapshot is taken while it's
+  stopped, then it's started back up again. Applies to any VM/container on
+  this Proxmox host, not just the AD range's own 7 VMs. If asked to "clear
+  logs" as part of the same request, that happens *before* shutdown (with
+  the relevant services stopped first so nothing's mid-write), not after.
 
 ## Control host
 
