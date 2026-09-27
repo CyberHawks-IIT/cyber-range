@@ -11,6 +11,7 @@ Ansible code and [CLAUDE.md](CLAUDE.md), the running source of truth for
 project history and decisions.
 
 > **[Network diagram](docs/network-and-infrastructure.md)** — every segment, laid out
+> 
 > **[Range briefing](https://claude.ai/artifact/LAVSDoKzNEfconPj9NN7Jz)** — hosts, starter access, and the full findings list
 
 [![Network diagram](docs/network-diagram.jpg)](docs/network-and-infrastructure.md)
