@@ -31,7 +31,24 @@ try {
         @{ Name = "File System";                        Success = $true; Failure = $true  }, # 4656/4663 file SACLs
         @{ Name = "Registry";                           Success = $true; Failure = $true  }, # 4656/4657/4663 registry SACLs
         @{ Name = "Other Object Access Events";         Success = $true; Failure = $true  }, # 4697/4698
-        @{ Name = "Audit Policy Change";                Success = $true; Failure = $true  }  # policy-change coverage
+        @{ Name = "Audit Policy Change";                Success = $true; Failure = $true  }, # policy-change coverage
+        @{ Name = "Sensitive Privilege Use";            Success = $true; Failure = $true  }  # 4673/4674 -- SeBackupPrivilege
+                                                                                              # (`reg save HKLM\SAM`, and any
+                                                                                              # other backup-semantics registry/
+                                                                                              # file read) does not trip the
+                                                                                              # Registry/File System SACLs above
+                                                                                              # at all -- confirmed live
+                                                                                              # 2026-09-27 testing SAM hive
+                                                                                              # dumping: zero 4656/4663 events
+                                                                                              # for reg.exe, only for an
+                                                                                              # unrelated Get-Acl call in the
+                                                                                              # same session. RegSaveKeyEx's
+                                                                                              # backup codepath bypasses normal
+                                                                                              # object-access auditing; Windows'
+                                                                                              # actual signal for this is
+                                                                                              # Privilege Use, not Object
+                                                                                              # Access. See splunk-detections
+                                                                                              # CLAUDE.md for the full writeup.
     )
 
     $lines = @()
@@ -54,6 +71,20 @@ try {
     }
     Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" -Name "SCENoApplyLegacyAuditPolicy" -Value 1 -Type DWord
     $lines += "Set SCENoApplyLegacyAuditPolicy=1"
+
+    # Confirmed live 2026-09-27: "Sensitive Privilege Use" auditing above is
+    # necessary but NOT sufficient for 4673/4674 on backup/restore-privilege
+    # operations specifically (e.g. `reg save HKLM\SAM`) -- Windows
+    # separately gates ALL such events behind this LSA value regardless of
+    # the audit subcategory setting. REQUIRES A REBOOT to take effect (LSA
+    # reads it once at startup, not on every check) -- this script alone
+    # does not reboot the host; whatever calls this script must do that
+    # afterward if SAM/LSA dump detection via this path is needed
+    # immediately rather than after the host's next natural reboot. See
+    # splunk-detections CLAUDE.md's SAM/LSA dump writeup for the full
+    # debugging trail.
+    Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" -Name "FullPrivilegeAuditing" -Value ([byte[]](1)) -Type Binary
+    $lines += "Set FullPrivilegeAuditing=1 (requires reboot to take effect)"
 
     foreach ($sub in $subcategories) {
         $successFlag = if ($sub.Success) { "enable" } else { "disable" }
