@@ -2,124 +2,103 @@
 
 A personal cyber range for practicing identification and remediation of
 common vulnerabilities — primarily Active Directory misconfigurations and
-Kerberos delegation abuse, plus adjacent web/SQL findings, all tied together
-under a single in-universe company theme ("CyberHawks").
+Kerberos delegation abuse, plus adjacent web/SQL findings — under a single
+in-universe company theme, **CyberHawks**.
 
-The range is a 7-VM Windows Server/AD environment (`cyberhawks.lab`) hosted on
-a Proxmox server and managed from a Windows control host over a NetBird VPN.
-This repo holds the Ansible code used to provision/configure the range, plus
-[CLAUDE.md](CLAUDE.md), which is the running source of truth for project
-context, decisions, and known issues across sessions.
+7-VM Windows Server/AD environment (`cyberhawks.lab`), hosted on Proxmox,
+managed from a Windows control host over NetBird. This repo holds the
+Ansible code and [CLAUDE.md](CLAUDE.md), the running source of truth for
+project history and decisions.
 
-## Prerequisites
+## Part of a bigger project
 
-### Control host
+| Repo | Layer |
+|---|---|
+| **cyber-range** *(this repo)* | The AD range |
+| [AttackerVMs](https://github.com/CyberHawks-IIT/AttackerVMs) | Attacker VM templates + cloudbase-init |
+| [defense-tooling](https://github.com/CyberHawks-IIT/defense-tooling) | Splunk + Zeek monitoring stack |
+| [splunk-detections](https://github.com/CyberHawks-IIT/splunk-detections) | Detection content for that Splunk instance |
 
-A Windows machine with:
-
-- **OpenSSH client** (built into Windows 11) — SSH access to the Proxmox host.
-- **[PuTTY](https://www.putty.org/) / `plink`** — only needed for one-off
-  password-authenticated bootstrapping (e.g. initial SSH key push), since
-  Win32-OpenSSH's `ssh` can't be scripted against a password prompt.
-- **[GitHub CLI](https://cli.github.com/)** (`gh`) — for repo/PR operations.
-- **WSL2 + Ansible** — the intended way to drive provisioning
-  (`ansible-playbook` against `ansible/inventory/hosts.yml`). Requires
-  `pywinrm` inside the WSL2 environment for the `winrm` connection plugin
-  Ansible uses to reach the Windows VMs.
-- An SSH keypair for range hosts (private key gitignored, never committed)
-  authorized on the Proxmox host and any Linux support hosts.
-- **[NetBird](https://netbird.io/)** (or equivalent) VPN client, joined to the
-  same network as the Proxmox host — this routes directly to every VM's IP,
-  no separate SSH tunnel or jump host needed.
-
-### Proxmox
-
-- A Proxmox VE host reachable over SSH (key-only) from the control host, with
-  enough capacity for 7 Windows VMs (4 vCPU/4GB RAM each by default; sql1 and
-  sql2 sized up to 48GB disk, the rest at 32GB).
-- Windows Server 2016/2019/2022 and Windows 11 cloud-init/cloudbase-init
-  templates already built and available for cloning (this project doesn't
-  build the templates themselves — see [CLAUDE.md](CLAUDE.md) for the
-  specific templates used and known cloudbase-init quirks on them).
-
-### Windows access
-
-All 7 range VMs are managed over **WinRM** (`Invoke-Command` /
-`ansible.windows` modules), authenticating as the local `Administrator`
-account. The control host needs `WSMan:\localhost\Client\TrustedHosts` set to
-include the 7 VM IPs (see [CLAUDE.md](CLAUDE.md) for the exact list). Because
-the control host isn't itself domain-joined, WinRM auth to the range is NTLM,
-not Kerberos — this has real implications for anything that needs the target
-machine to make its *own* further authenticated call (see the "WinRM
-double-hop" note in CLAUDE.md before writing new automation against this
-range).
-
-Credentials aren't stored in this repo. Retrieve the current shared local
-Administrator password (also used for the domain `Administrator` account and,
-on sql1/sql2, the SQL Server `sa` login) by running this on the Proxmox host:
-
-```
-qm cloudinit dump <vmid> user
-```
+Each repo stands alone — use just this one, or combine them. Full network
+layout (how they all fit together on the shared Proxmox host): see
+[docs/network-and-infrastructure.md](docs/network-and-infrastructure.md).
 
 ## Architecture
 
-Single AD forest/domain **`cyberhawks.lab`** (NetBIOS `CYBERHAWKS`), on the
-Proxmox `ad` bridge, network `10.0.2.0/24`, gateway `10.0.2.1`.
+Single AD forest **`cyberhawks.lab`** (NetBIOS `CYBERHAWKS`) on `10.0.2.0/24`.
 
-| Name | Role | OS | IP | Key software |
+| Host | Role | OS | IP | Key software |
 |---|---|---|---|---|
-| dc1 | Domain controller (forest root) | Windows Server 2016 | 10.0.2.2 | AD DS, DNS |
-| dc2 | Domain controller (additional) | Windows Server 2019 | 10.0.2.3 | AD DS, DNS |
-| ca | Certificate authority | Windows Server 2019 | 10.0.2.4 | AD CS — Enterprise Root CA (`cyberhawks-CA`) + Web Enrollment (IIS `certsrv`) |
-| web | Web server | Windows Server 2022 | 10.0.2.5 | IIS (planned: internal "CyberHawks Employee Portal" site, see CLAUDE.md) |
-| sql1 | Database server | Windows Server 2016 | 10.0.2.6 | SQL Server 2016 SP2 (mixed-mode auth) + SSMS |
-| sql2 | Database server | Windows Server 2022 | 10.0.2.7 | SQL Server 2022 (mixed-mode auth) + SSMS |
-| workstation | Domain-joined client | Windows 11 Pro N | 10.0.2.8 | — |
+| dc1 | Domain controller (forest root) | Server 2016 | .2 | AD DS, DNS |
+| dc2 | Domain controller | Server 2019 | .3 | AD DS, DNS |
+| ca | Certificate authority | Server 2019 | .4 | AD CS — `cyberhawks-CA` + Web Enrollment |
+| web | Web server | Server 2022 | .5 | IIS — internal employee portal |
+| sql1 | Database | Server 2016 | .6 | SQL Server 2016 SP2 + SSMS |
+| sql2 | Database | Server 2022 | .7 | SQL Server 2022 + SSMS |
+| workstation | Domain client | Windows 11 Pro N | .8 | — |
 
-All 7 are domain members (dc1/dc2 as the domain itself). See
-[CLAUDE.md](CLAUDE.md) for VMIDs, MAC addresses, DNS configuration, and the
-history of how each was provisioned and fixed up.
+The range is built toward a specific, fully-implemented set of
+vulnerabilities and misconfigurations — see CLAUDE.md's **"Vulnerable AD
+range design"** for the full design (delegation coverage, starter accounts,
+credential-leak locations, ADCS ESC templates) and its verification pass.
 
-The range is intentionally built toward a specific, documented set of
-vulnerabilities and misconfigurations for training purposes — see the
-"Vulnerable AD range design" section of [CLAUDE.md](CLAUDE.md) for the full
-design (delegation coverage, starter accounts, credential-leak locations,
-ADCS ESC templates, etc.) and its current implementation status.
+## Prerequisites
+
+**Control host** (Windows):
+
+- OpenSSH client (built into Windows 11)
+- [PuTTY](https://www.putty.org/)/`plink` — one-off password-authenticated bootstrapping only
+- [GitHub CLI](https://cli.github.com/) (`gh`)
+- WSL2 + Ansible + `pywinrm` — drives provisioning against `ansible/inventory/hosts.yml`
+- SSH keypair for range hosts (gitignored, never committed)
+- [NetBird](https://netbird.io/) (or equivalent) VPN — routes directly to every VM's IP, no tunnel/jump host needed
+
+**Proxmox**: reachable over SSH (key-only), capacity for 7 Windows VMs
+(4 vCPU/4GB each; sql1/sql2 at 48GB disk, rest 32GB), and the
+Windows Server 2016/2019/2022 + Windows 11 templates already built
+(see [AttackerVMs](https://github.com/CyberHawks-IIT/AttackerVMs)).
+
+**Windows access**: WinRM only, local `Administrator`, NTLM (control host
+isn't domain-joined — see CLAUDE.md's "WinRM double-hop" note before writing
+automation that needs a target machine to make its *own* further
+authenticated call). `WSMan:\localhost\Client\TrustedHosts` must include all
+7 VM IPs.
+
+Credentials aren't stored here — retrieve the shared local Administrator
+password (also the domain `Administrator` and SQL `sa` password) via:
+
+```bash
+qm cloudinit dump <vmid> user
+```
+
+## Getting started
+
+1. Set up control-host prerequisites (SSH key, WinRM `TrustedHosts`, WSL2 + Ansible + `pywinrm`).
+2. Retrieve the shared credential (above) and store it where `ansible-vault` can read it.
+3. `cd ansible && ansible all -i inventory/hosts.yml -m win_ping` — confirm connectivity.
+4. See [CLAUDE.md](CLAUDE.md) for what's built vs. planned, and its "Open items" for what's manual vs. scripted.
 
 ## Repository layout
 
 ```
 cyber-range/
-  CLAUDE.md              # running source of truth: decisions, history, known issues
+  CLAUDE.md              # running source of truth
   README.md              # this file
-  .gitignore             # excludes private keys, vault secrets, retry files
+  docs/
+    network-and-infrastructure.md  # full network layout + manual setup
+    range-briefing.html            # student-facing handout
   ansible/
-    ansible.cfg
-    inventory/
-      hosts.yml           # the 7 range VMs, grouped by role, plus the Proxmox host
+    inventory/hosts.yml   # the 7 range VMs, grouped by role
     playbooks/             # provisioning/vulnerability playbooks
-    group_vars/
-    host_vars/
     roles/
 ```
 
-## Getting started
-
-1. Set up the control host prerequisites above (SSH key, WinRM TrustedHosts,
-   WSL2 + Ansible + `pywinrm`).
-2. Retrieve the shared Windows credential via `qm cloudinit dump <vmid> user`
-   on the Proxmox host and store it somewhere `ansible-vault` can read (not in
-   this repo — see `ansible/inventory/hosts.yml` for where it's referenced).
-3. From WSL2: `cd ansible && ansible all -i inventory/hosts.yml -m win_ping`
-   (Windows hosts) to confirm connectivity.
-4. See [CLAUDE.md](CLAUDE.md) for what's actually been built so far vs. what's
-   still planned — the domain, CA, and SQL Server instances are live; the
-   intentional-vulnerability configuration is not yet implemented.
-
 ## Scope note
 
-This repo covers the Proxmox-hosted AD range only. A few standalone security
-tools also live on this network for use *against* the range (reporting,
-vulnerability scanning, attack-path analysis) — they're separately managed,
-outside this repo's scope, and intentionally not documented here.
+This repo covers the AD range and the shared network layout it sits on.
+Out of scope, by design:
+
+- Attacker VM templates → [AttackerVMs](https://github.com/CyberHawks-IIT/AttackerVMs)
+- Monitoring stack → [defense-tooling](https://github.com/CyberHawks-IIT/defense-tooling)
+- Detection content → [splunk-detections](https://github.com/CyberHawks-IIT/splunk-detections)
+- Standalone offense tooling (reporting, scanning, attack-path analysis) — separately managed, undocumented here

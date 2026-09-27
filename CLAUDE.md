@@ -1110,11 +1110,106 @@ every 5 minutes, so the growth is negligible by comparison and was left
 as-is per the user's call) — worth the same treatment if it ever becomes
 worth the churn.
 
+## Defense tooling: monitoring stack + new `defense` network (2026-09-27)
+
+A Splunk + Zeek monitoring layer was added on top of the range this session,
+split into two new repos (see "GitHub" below): `defense-tooling` (Ansible
+roles + Proxmox scripts for the Splunk/Zeek stack itself) and
+`splunk-detections` (the detection design backlog — now living there instead
+of only in an ephemeral claude.ai artifact). Full network layout, including
+this section's content, is now also written up publicly in
+`docs/network-and-infrastructure.md` in this repo.
+
+**Two things discovered this session that weren't previously documented
+anywhere in this file:**
+
+1. **pfSense (VMID 100) is the central router for the entire lab** — nine
+   NICs, one per Proxmox SDN vnet (`vmbr0`, `admin`, `offense`, `attacker`,
+   `defense`, `services`, `ad`, `demo`, `cptc11`). It's the only path between
+   any two segments; nothing else routes or NATs anywhere in this
+   environment. This had never been written down before — worth knowing
+   for anything that needs to reason about how traffic actually moves
+   between segments (e.g. where to put a network sensor).
+2. **A `defense` vnet exists** (10.0.10.0/24, gateway 10.0.10.1 via
+   pfSense) — not part of this repo's own SDN setup history above, created
+   directly by the user outside of any session recorded here. Hosts:
+   `splunk` (CT 510, 10.0.10.2) and `zeek` (CT 511, 10.0.10.3), both linked
+   clones of the shared Debian 12 template (CT 200, `basevol-200-disk-0`).
+
+**Gotchas hit standing this up, now scripted in `defense-tooling`** (see
+that repo's own CLAUDE.md for full detail — summarized here since they're
+Proxmox-level facts as relevant to this repo as to that one):
+
+- **Cloning from CT 200 can never produce a privileged container** —
+  `unprivileged` is fixed at creation and copied as-is by `pct clone`
+  (linked or full), and CT 200 itself is unprivileged. Zeek needs a
+  privileged container for raw packet capture, so CT 511 was destroyed and
+  rebuilt fresh from the base `debian-12-standard` template instead of
+  cloned — confirmed via `/proc/self/uid_map` showing the full
+  `0 0 4294967295` range post-rebuild. This means CT 511 does **not** carry
+  whatever baseline customization CT 200 has beyond stock Debian; the
+  `sysadmin` account (uid/gid 1000, `sudo`+`users` groups, passwordless sudo
+  matching the pattern on other hosts, `/opt/zeek` and `S@lcianaszkot23` as
+  the shared password) had to be recreated by hand on CT 511 specifically
+  for this reason — it does exist on CT 510 (splunk) via the normal
+  clone-from-200 path.
+- **Proxmox's per-guest firewall (`firewall=1`) silently drops mirrored
+  traffic.** Zeek's sensor needs a *second*, dedicated capture NIC with
+  `firewall=0` and no IP — sharing the mirror target with a `firewall=1`
+  management NIC means Proxmox's own conntrack-based filtering (inserted as
+  an intermediate `fwbr<vmid>i<n>` bridge) eats the injected frames with no
+  error anywhere. Verified end-to-end afterward using `qm guest exec` against
+  `john-kali` (VM 611, one of the student attacker VMs) to ping a real AD
+  host through pfSense and confirm the ping showed up in Zeek's `conn.log`.
+- Network mirroring itself uses `tc` ingress + `mirred` on pfSense's
+  per-vnet tap interfaces (host-side names `tap100i<N>`, resolved from
+  `qm config 100`'s `netN: ...,bridge=<vnet>` lines), persisted via a
+  Proxmox hookscript on VMID 100's `post-start` phase (tap devices, and any
+  `tc` config on them, are recreated fresh every VM start). Generalized into
+  `defense-tooling/scripts/proxmox/setup-mirror.sh`.
+
+**Reconciled against the team's own network diagram (2026-09-27, same day):**
+the user shared a hand-drawn diagram of the full pfSense-centered network
+that's more complete than anything reconstructed from `qm config` alone —
+now written up in `docs/network-and-infrastructure.md`. Three things it
+surfaced, resolved with the user directly rather than guessed at:
+
+- **The diagram labels 10.0.10.3 "Suricata"; Zeek is what's actually
+  there.** Confirmed with the user: "Suricata" in the diagram is a generic
+  placeholder for "the IDS box," not a correction to make — Zeek is the
+  real, intended tool and is documented as such everywhere.
+- **A `defenders` network (10.0.11.0/24, Blue Team workstations) doesn't
+  exist yet** — not present in pfSense's actual `qm config 100` (only 9
+  NICs as of this session). Confirmed as planned-but-not-built; documented
+  that way in `docs/network-and-infrastructure.md` rather than presented as
+  live.
+- **The diagram's "Student Created Network" (10.0.3.0/24) is the same
+  network previously documented in this file as `cptc11`, "another team's
+  VMs, out of scope."** That characterization was wrong in spirit, per the
+  user: it's the student-created network by design; it currently happens to
+  hold a leftover environment from last year's Collegiate Penetration
+  Testing Competition, which is incidental content, not a second team's
+  infrastructure to stay away from. Updated in `docs/network-and-infrastructure.md`.
+- **New info from the diagram not previously captured anywhere:** an
+  `admin` network (10.0.0.0/24, gateway 10.0.0.1, a "Manager" host at
+  10.0.0.2), a C2 team server on `offense` (192.168.0.5), and a third
+  external access path into pfSense (**HackTheBox OpenVPN**, alongside WAN
+  and this project's own NetBird VPN) — none of these had been noticed via
+  direct Proxmox inspection alone.
+
+The diagram image itself (`network-diagram.png` or similar) still needs to
+be added to `docs/` by hand — Claude Code has no mechanism to pull an
+inline chat image out onto disk; `docs/network-and-infrastructure.md`
+references it by an assumed filename pending that.
+
 ## GitHub
 
-Repos: `CyberHawks-IIT/cyber-range` and `CyberHawks-IIT/AttackerVMs` — both
-**public** (this file previously said cyber-range was private; corrected
-2026-09-01, confirmed via `gh repo list CyberHawks-IIT`).
+Repos: `CyberHawks-IIT/cyber-range`, `CyberHawks-IIT/AttackerVMs`,
+`CyberHawks-IIT/defense-tooling`, and `CyberHawks-IIT/splunk-detections` —
+all **public** (this file previously said cyber-range was private; corrected
+2026-09-01, confirmed via `gh repo list CyberHawks-IIT`). The latter two were
+created 2026-09-27 for the monitoring stack and its detection content,
+respectively — see the "Defense tooling" section above.
 
 ## Remote Control instance (Proxmox host, 2026-09-01)
 
