@@ -41,27 +41,69 @@
 # correction instead of silently ignoring it. This is foundational and the
 # range's VMs get paused/snapshotted often, so it's persisted here rather
 # than left as a one-off manual fix.
-- name: Configure dc1 for real external NTP sync (PDC Emulator is the domain's time authority)
+#
+# dc2 gets the identical external-NTP config, not just dc1 -- originally
+# dc2 was left on the domain-hierarchy default (NT5DS, syncing from dc1),
+# which is the textbook-correct setup for a non-PDC-emulator DC. In
+# practice this range's DCs get fully powered off and cold-booted together
+# (snapshots, rollbacks) far more often than a real domain ever would, and
+# NT5DS has a chicken-and-egg problem on a cold boot: it needs a
+# Kerberos-authenticated call to another DC to get the time, but Kerberos
+# itself won't work until the clock is already within 5 minutes of correct.
+# Confirmed live, twice (once after a `qm rollback`, once after this
+# session's own ordinary snapshot power-cycle): dc2 comes up stuck on
+# "Local CMOS Clock", drifts ~2 hours out from dc1, and replication for
+# several NCs fails with Kerberos error 1908 until someone manually forces
+# a resync. Pointing both DCs at the same external NTP pool sidesteps that
+# bootstrap race entirely -- they converge to the same real time
+# independently of each other and of Kerberos being up yet. Not the
+# Microsoft-recommended production topology (only the PDC emulator should
+# normally go external), but this environment is a training lab prioritizing
+# "comes back up correctly after every cold boot" over hierarchy purity.
+- name: Configure dc1 and dc2 for real external NTP sync (avoids the NT5DS cold-boot chicken-and-egg problem)
   ansible.windows.win_shell: >
     w32tm /config /manualpeerlist:"time.windows.com,0x8 time.google.com,0x8 pool.ntp.org,0x8" /syncfromflags:manual /reliable:yes /update
-  when: inventory_hostname == 'dc1'
+  when: inventory_hostname in ['dc1', 'dc2']
   changed_when: true
 
-- name: Raise w32time max phase correction limits on dc1 (default 5 min is too small for a multi-hour drift recovery)
+- name: Raise w32time max phase correction limits on dc1/dc2 (default 5 min is too small for a multi-hour drift recovery)
   ansible.windows.win_shell: >
     Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\W32Time\Config" -Name "MaxPosPhaseCorrection" -Value 0x7FFFFFFF -Type DWord;
     Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\W32Time\Config" -Name "MaxNegPhaseCorrection" -Value 0x7FFFFFFF -Type DWord
-  when: inventory_hostname == 'dc1'
+  when: inventory_hostname in ['dc1', 'dc2']
   changed_when: true
 
-- name: Restart w32time and force resync on dc1
+- name: Restart w32time and force resync on dc1/dc2
   ansible.windows.win_shell: "Restart-Service w32time -Force; Start-Sleep -Seconds 3; w32tm /resync /force"
-  when: inventory_hostname == 'dc1'
+  when: inventory_hostname in ['dc1', 'dc2']
   changed_when: true
   failed_when: false
 
 - name: Restart w32time and resync all other domain members from the hierarchy
   ansible.windows.win_shell: "Restart-Service w32time -Force; Start-Sleep -Seconds 3; w32tm /resync /rediscover"
-  when: inventory_hostname != 'dc1'
+  when: inventory_hostname not in ['dc1', 'dc2']
   changed_when: true
   failed_when: false
+
+# Belt-and-suspenders on top of the external-NTP config above: w32time's own
+# startup poll cycle *should* self-correct within its first minute or two on
+# every future boot without any of this, but a scheduled task removes the
+# wait entirely and makes the fix self-healing with no dependency on service
+# startup ordering or poll-interval timing being cooperative. Idempotent --
+# recreating an identical task on every playbook run is harmless.
+# A file-backed script (not an inline -Command) avoids a nested-quoting
+# failure in the /TR argument -- confirmed live: schtasks' own command-line
+# parser mangled the escaped inner quotes needed for -Command.
+- name: Upload the startup resync script
+  ansible.windows.win_copy:
+    content: |
+      Start-Sleep -Seconds 30
+      w32tm /resync /force
+    dest: "C:\\Windows\\Temp\\force_time_resync.ps1"
+  when: inventory_hostname in ['dc1', 'dc2']
+
+- name: Create a startup task on dc1/dc2 that force-resyncs w32time
+  ansible.windows.win_shell: >
+    schtasks /Create /TN "ForceTimeResyncOnBoot" /TR "powershell.exe -ExecutionPolicy Bypass -File C:\Windows\Temp\force_time_resync.ps1" /SC ONSTART /RU "SYSTEM" /RL HIGHEST /F
+  when: inventory_hostname in ['dc1', 'dc2']
+  changed_when: true

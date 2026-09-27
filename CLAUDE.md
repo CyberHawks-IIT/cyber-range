@@ -1303,15 +1303,30 @@ re-running the existing `network_prereqs` role, confirmed via `repadmin
 **Confirmed this isn't specific to the rollback** — the same clock-skew/
 replication-failure pattern recurred after the *normal* end-of-session
 power-off→snapshot→power-on cycle for this Phase Q work (both DCs cold-booted
-together for the `detection-logging-v1` snapshot below). Expect this on any
-future cold boot of dc1+dc2 together, not just after a `qm rollback`: rerun
-`ansible-playbook playbooks/vulnerable-range.yml --tags network_prereqs
---limit dc1,dc2` first, then `repadmin /replsummary` on dc1 to check. If
-`/replsummary` still shows failures after that, `repadmin /syncall /AdeP`
-alone won't always clear the last few NCs (Configuration/Schema/
-ForestDnsZones tend to stick) — force each by name instead:
-`repadmin /replicate DC1 DC2 "<NC distinguished name>"` for each of
-`DC=cyberhawks,DC=lab`, `CN=Configuration,DC=cyberhawks,DC=lab`,
+together for the `detection-logging-v1` snapshot below). Root cause: dc2 was
+left on the domain-hierarchy default (NT5DS, syncing from dc1), which has a
+chicken-and-egg problem on a cold boot — it needs a Kerberos-authenticated
+call to get the time, but Kerberos won't work until the clock is already
+close to correct.
+
+**Fixed permanently (2026-09-27), not just worked around**: `network_prereqs`
+now points **both** dc1 and dc2 directly at external NTP (`time.windows.com`/
+`time.google.com`/`pool.ntp.org`) instead of only dc1, and additionally
+installs a `ForceTimeResyncOnBoot` scheduled task (`ONSTART`, runs as
+`SYSTEM`, 30s delay then `w32tm /resync /force`) on both, so the fix
+self-heals on every future cold boot with no manual Ansible re-run needed.
+Not the Microsoft-recommended production topology (only the PDC emulator
+should normally go external) but the right tradeoff for a lab whose DCs get
+fully powered off and cold-booted together far more often than a real
+domain would. If a clock-skew replication failure ever recurs anyway (e.g.
+a fresh clone from the templates, before this task exists), the manual fix
+is: rerun `ansible-playbook playbooks/vulnerable-range.yml --tags
+network_prereqs --limit dc1,dc2`, then check `repadmin /replsummary` on
+dc1. If failures remain, `repadmin /syncall /AdeP` alone won't always clear
+the last few NCs (Configuration/Schema/ForestDnsZones tend to stick) — force
+each by name instead: `repadmin /replicate DC1 DC2 "<NC distinguished
+name>"` for each of `DC=cyberhawks,DC=lab`,
+`CN=Configuration,DC=cyberhawks,DC=lab`,
 `CN=Schema,CN=Configuration,DC=cyberhawks,DC=lab`,
 `DC=DomainDnsZones,DC=cyberhawks,DC=lab`, and
 `DC=ForestDnsZones,DC=cyberhawks,DC=lab`.
