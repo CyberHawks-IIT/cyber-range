@@ -1,0 +1,20 @@
+---
+# Runs against dc1,dc2.
+- name: Upload DC SACL configuration script
+  ansible.windows.win_copy:
+    src: configure_sacls_dc.ps1
+    dest: "C:\\Windows\\Temp\\configure_sacls_dc.ps1"
+
+- name: Apply DC SACLs (NTDS.dit, NETLOGON scripts, Default Domain Policy GPO)
+  ansible.windows.win_shell: "C:\\Windows\\Temp\\configure_sacls_dc.ps1"
+  register: sacls_dc_result
+  changed_when: true
+
+- name: Show DC SACL result
+  ansible.builtin.debug:
+    var: sacls_dc_result.stdout_lines
+
+- name: Remove temp script
+  ansible.windows.win_file:
+    path: "C:\\Windows\\Temp\\configure_sacls_dc.ps1"
+    state: absent

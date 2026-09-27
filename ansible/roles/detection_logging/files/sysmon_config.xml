@@ -1,0 +1,63 @@
+<Sysmon schemaversion="4.90">
+  <EventFiltering>
+    <!-- Event 1: scoped to the one Sysmon-based detection that needs it
+         (splunk-detections backlog, "Lateral movement" -> WMI remote
+         execution: a child process of WmiPrvSE.exe). Logging every process
+         creation domain-wide would multiply this range's Splunk volume many
+         times over for no detection that actually consumes it. -->
+    <RuleGroup name="ProcessCreateInclude" groupRelation="or">
+      <ProcessCreate onmatch="include">
+        <ParentImage condition="end with">WmiPrvSE.exe</ParentImage>
+      </ProcessCreate>
+    </RuleGroup>
+
+    <!-- Event 10: scoped to LSASS access (credential-dumping detection),
+         with an allowlist for the two legitimate accessors the backlog
+         calls out by name (Defender's own scanner and the WMI provider
+         host), both of which touch LSASS as part of normal operation and
+         would otherwise drown the real signal. -->
+    <RuleGroup name="ProcessAccessInclude" groupRelation="or">
+      <ProcessAccess onmatch="include">
+        <TargetImage condition="end with">lsass.exe</TargetImage>
+      </ProcessAccess>
+    </RuleGroup>
+    <RuleGroup name="ProcessAccessExclude" groupRelation="or">
+      <ProcessAccess onmatch="exclude">
+        <SourceImage condition="end with">MsMpEng.exe</SourceImage>
+      </ProcessAccess>
+      <ProcessAccess onmatch="exclude">
+        <SourceImage condition="end with">WmiPrvSE.exe</SourceImage>
+      </ProcessAccess>
+    </RuleGroup>
+
+    <!-- Events 17/18: named pipe created/connected. Scoped to exactly the
+         five pipe names the coercion-trigger detection keys off of
+         (PetitPotam/DFSCoerce/ShadowCoerce/PrinterBug; MS-EFSR binds over
+         either efsrpc or lsarpc) instead of every named pipe on the box. -->
+    <RuleGroup name="PipeEventsInclude" groupRelation="or">
+      <PipeEvent onmatch="include">
+        <PipeName condition="is">\efsrpc</PipeName>
+      </PipeEvent>
+      <PipeEvent onmatch="include">
+        <PipeName condition="is">\lsarpc</PipeName>
+      </PipeEvent>
+      <PipeEvent onmatch="include">
+        <PipeName condition="is">\netdfs</PipeName>
+      </PipeEvent>
+      <PipeEvent onmatch="include">
+        <PipeName condition="is">\FssagentRpc</PipeName>
+      </PipeEvent>
+      <PipeEvent onmatch="include">
+        <PipeName condition="is">\spoolss</PipeName>
+      </PipeEvent>
+    </RuleGroup>
+
+    <!-- Events 19/20/21: WMI event filter/consumer/binding created. Feeds
+         the WMI-event-subscription-persistence detection. Nothing to scope
+         down further: a WMI event subscription being registered at all is
+         already a rare, high-signal event on these hosts. -->
+    <RuleGroup name="WmiEvents" groupRelation="or">
+      <WmiEvent onmatch="exclude" />
+    </RuleGroup>
+  </EventFiltering>
+</Sysmon>

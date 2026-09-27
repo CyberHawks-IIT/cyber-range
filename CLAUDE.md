@@ -1224,8 +1224,8 @@ offense infrastructure, not something to instrument.
 
 | # | Step | Lives in | Status |
 |---|---|---|---|
-| 1 | Install the Splunk Universal Forwarder + required add-ons on every monitored host | `defense-tooling` | Not started — needs a new Windows forwarder role (only Linux exists today) |
-| 2 | Make the host-side config changes so the log sources those hosts need to *produce* actually exist (audit policy, SACLs, Sysmon, 1644 diagnostics, auditd rules) | **This repo** | Not started |
+| 1 | Install the Splunk Universal Forwarder + required add-ons on every monitored host | `defense-tooling` | Done — `splunk_forwarder_windows`/`splunk_forwarder` roles installed on all 7 AD VMs + demo (`splunk_forwarders_windows`/`splunk_forwarders` groups in that repo's inventory) |
+| 2 | Make the host-side config changes so the log sources those hosts need to *produce* actually exist (audit policy, SACLs, Sysmon, 1644 diagnostics, auditd rules) | **This repo** | Done 2026-09-27 — `ansible/roles/detection_logging` (Windows) + `ansible/roles/demo_auditd` (demo), wired into `playbooks/vulnerable-range.yml` as Phase Q (`--tags detection_logging`) |
 | 3 | Configure forwarders to ship a minimal, explicit set of logs — only what's needed for named detections | `defense-tooling` | Not started — extends the same "explicit allowlist" pattern already used for Zeek's `splunk_uf_monitor_files` |
 | 4 | Organize ingested logs in Splunk (indexes, sourcetypes, macros) so they're easy to query | `defense-tooling` | Not started |
 | 5 | Implement and verify real detections against `detections/backlog.md` | `splunk-detections` | Not started — backlog itself (the design) is done |
@@ -1259,6 +1259,46 @@ backlog:
 - **demo box**: equivalent `auditd` rules for the `/etc/shadow` finding.
 - Also needs: the demo box added to this repo's Ansible inventory (currently
   only the 7 AD VMs are in `ansible/inventory/hosts.yml`).
+
+**Built and verified 2026-09-27.** `demo` added to `ansible/inventory/hosts.yml`
+under `linux_vms` (SSH as `sysadmin`, key auth — the top-level
+`ansible_ssh_private_key_file: ~/.ssh/...` resolves against whatever user runs
+`ansible-playbook`, which breaks under this repo's own documented WSL2 control
+node since `~` there is `/root`; `demo`'s entry overrides it to the WSL mount
+of the Windows-side key, `/mnt/c/Users/<user>/.ssh/id_ed25519_cyberrange`,
+matching the fix `defense-tooling`'s inventory already used for the same
+host). Confirmed live on all 7 range VMs: audit subcategories applied
+(`auditpol /get /category:*` shows ~60 configured lines), Sysmon running with
+Events 1/10/17/18/19/20/21, SAM/SECURITY/DPAPI/NTDS.dit/NETLOGON/Default
+Domain Policy GPO SACLs set, 1644 diagnostics + Directory Service log cap on
+dc1/dc2. `WinDefend`/`WdNisSvc` registry SACLs fail with "unauthorized
+operation" on Server 2019+/Windows 11 (Defender Tamper Protection hardens
+those keys' ACLs against changes even from SYSTEM; absent on the two Server
+2016 boxes, dc1/sql1) — the role logs this as a non-fatal warning and moves
+on rather than aborting the rest of the host's configuration; `Sense`'s key
+isn't similarly hardened and sets fine everywhere.
+
+**Incident during this build, since fixed:** the first version of
+`configure_audit_policy.ps1`/`configure_1644.ps1` used
+`New-Item -Path <existing key> -Force`, which (confirmed the hard way) does a
+delete-then-recreate of the whole registry subtree rather than an in-place
+update. This wiped `HKLM:\...\Control\Lsa` (including `Authentication
+Packages`/`Security Packages`/`NoLmHash`/the `Kerberos`/`MSV1_0` subkeys) on
+dc1 and dc2, and partially wiped it on sql1, before the bug was caught.
+Both DCs still ran fine at the time (LSASS had the config cached in memory)
+but were at real risk on their next reboot. Remediated by rolling dc1
+(320), dc2 (321), and sql1 (324) back to the `vulnerable-range-v2` Proxmox
+snapshot, then redoing Phase Q with the fixed scripts (guarded with
+`Test-Path` so `New-Item` only ever runs against a key that's genuinely
+missing). The rollback also reverted the Splunk Universal Forwarder install
+on those three hosts (installed in a separate, not-yet-documented-here
+session predating this one) — reinstalled afterward via `defense-tooling`'s
+`splunk-forwarder-windows.yml`/`splunk-forwarder.yml`. Rolling both DCs back
+together also surfaced a ~2-hour clock skew on dc2 (stuck on "Local CMOS
+Clock" post-boot, blocking Kerberos between the DCs and breaking replication
+for the Configuration/Schema/ForestDnsZones NCs until fixed) — resolved by
+re-running the existing `network_prereqs` role, confirmed via `repadmin
+/replsummary` (0 failures both directions) afterward.
 
 ## GitHub
 

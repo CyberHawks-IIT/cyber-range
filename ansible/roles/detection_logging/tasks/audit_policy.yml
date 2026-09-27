@@ -1,0 +1,20 @@
+---
+# Runs against all windows_vms.
+- name: Upload audit policy configuration script
+  ansible.windows.win_copy:
+    src: configure_audit_policy.ps1
+    dest: "C:\\Windows\\Temp\\configure_audit_policy.ps1"
+
+- name: Apply advanced audit policy subcategories
+  ansible.windows.win_shell: "C:\\Windows\\Temp\\configure_audit_policy.ps1"
+  register: audit_policy_result
+  changed_when: true
+
+- name: Show audit policy result
+  ansible.builtin.debug:
+    var: audit_policy_result.stdout_lines
+
+- name: Remove temp script
+  ansible.windows.win_file:
+    path: "C:\\Windows\\Temp\\configure_audit_policy.ps1"
+    state: absent

@@ -1,0 +1,28 @@
+---
+# Runs against all windows_vms.
+- name: Upload Sysmon config
+  ansible.windows.win_copy:
+    src: sysmon_config.xml
+    dest: "C:\\Windows\\Temp\\sysmon_config.xml"
+
+- name: Upload Sysmon install script
+  ansible.windows.win_copy:
+    src: install_sysmon.ps1
+    dest: "C:\\Windows\\Temp\\install_sysmon.ps1"
+
+- name: Install/configure Sysmon (Events 1, 10, 17, 18, 19, 20, 21)
+  ansible.windows.win_shell: "C:\\Windows\\Temp\\install_sysmon.ps1 -ConfigPath 'C:\\Windows\\Temp\\sysmon_config.xml'"
+  register: sysmon_result
+  changed_when: true
+
+- name: Show Sysmon result
+  ansible.builtin.debug:
+    var: sysmon_result.stdout_lines
+
+- name: Remove temp files
+  ansible.windows.win_file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "C:\\Windows\\Temp\\install_sysmon.ps1"
+    - "C:\\Windows\\Temp\\sysmon_config.xml"

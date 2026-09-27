@@ -1,0 +1,26 @@
+---
+# Runs against demo (10.1.1.1). PAM's own USER_LOGIN accounting already ties
+# to auid/ses once auditd is running -- no separate PAM config needed beyond
+# turning auditd on, per the backlog's note under "Linux (service-abuse host)".
+- name: Upload shadow-read auditd setup script
+  ansible.builtin.copy:
+    src: configure_shadow_auditd.sh
+    dest: /root/configure_shadow_auditd.sh
+    mode: "0700"
+  become: true
+
+- name: Apply shadow-read auditd rule
+  ansible.builtin.command: /root/configure_shadow_auditd.sh
+  register: auditd_result
+  changed_when: "'Installed' in auditd_result.stdout or 'Wrote' in auditd_result.stdout"
+  become: true
+
+- name: Show auditd result
+  ansible.builtin.debug:
+    var: auditd_result.stdout_lines
+
+- name: Remove temp script
+  ansible.builtin.file:
+    path: /root/configure_shadow_auditd.sh
+    state: absent
+  become: true

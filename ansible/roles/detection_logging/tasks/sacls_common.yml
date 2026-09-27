@@ -1,0 +1,20 @@
+---
+# Runs against all windows_vms.
+- name: Upload common SACL configuration script
+  ansible.windows.win_copy:
+    src: configure_sacls_common.ps1
+    dest: "C:\\Windows\\Temp\\configure_sacls_common.ps1"
+
+- name: Apply common SACLs (SAM/SECURITY hives, Defender keys, DPAPI folders)
+  ansible.windows.win_shell: "C:\\Windows\\Temp\\configure_sacls_common.ps1"
+  register: sacls_common_result
+  changed_when: true
+
+- name: Show common SACL result
+  ansible.builtin.debug:
+    var: sacls_common_result.stdout_lines
+
+- name: Remove temp script
+  ansible.windows.win_file:
+    path: "C:\\Windows\\Temp\\configure_sacls_common.ps1"
+    state: absent

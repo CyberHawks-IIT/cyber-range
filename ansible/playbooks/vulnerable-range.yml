@@ -281,3 +281,60 @@
   tags: [host_privesc]
   roles:
     - workstation_privesc
+
+# Phase Q implements "Monitoring rollout plan" step 2 from CLAUDE.md -- the
+# host-side config changes that make the log sources
+# splunk-detections/detections/backlog.md depends on actually get produced.
+# defense-tooling owns shipping/forwarding those logs (steps 1/3/4); this
+# repo only owns turning the sources on at the host.
+- name: Phase Q - Advanced audit policy subcategories
+  hosts: windows_vms
+  gather_facts: false
+  tags: [detection_logging]
+  tasks:
+    - ansible.builtin.import_role:
+        name: detection_logging
+        tasks_from: audit_policy
+
+- name: Phase Q - Common SACLs (SAM/SECURITY, Defender keys, DPAPI folders)
+  hosts: windows_vms
+  gather_facts: false
+  tags: [detection_logging]
+  tasks:
+    - ansible.builtin.import_role:
+        name: detection_logging
+        tasks_from: sacls_common
+
+- name: Phase Q - DC-only SACLs (NTDS.dit, NETLOGON scripts, Default Domain Policy GPO)
+  hosts: dc1,dc2
+  gather_facts: false
+  tags: [detection_logging]
+  tasks:
+    - ansible.builtin.import_role:
+        name: detection_logging
+        tasks_from: sacls_dc
+
+- name: Phase Q - Sysmon install (Events 1, 10, 17, 18, 19, 20, 21)
+  hosts: windows_vms
+  gather_facts: false
+  tags: [detection_logging]
+  tasks:
+    - ansible.builtin.import_role:
+        name: detection_logging
+        tasks_from: sysmon
+
+- name: Phase Q - 1644 LDAP diagnostics on dc1/dc2
+  hosts: dc1,dc2
+  gather_facts: false
+  tags: [detection_logging]
+  tasks:
+    - ansible.builtin.import_role:
+        name: detection_logging
+        tasks_from: ldap_1644
+
+- name: Phase Q - auditd rule for /etc/shadow reads on demo
+  hosts: demo
+  gather_facts: false
+  tags: [detection_logging]
+  roles:
+    - demo_auditd
