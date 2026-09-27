@@ -1338,6 +1338,102 @@ detection-logging-v1` restores any of them to this state (Phase Q applied,
 Splunk UF connected, replication healthy — verified post-snapshot-reboot
 per the clock-skew note above).
 
+### Step 2 follow-up: SQL Server telemetry + Certificate Services auditing (2026-09-27)
+
+`defense-tooling` flagged (after their own step-4 pass) that two log sources
+the range's own findings depend on still weren't being produced: SQL Server
+Audit was entirely unconfigured on sql1/sql2 (`sys.server_audits` returned 0
+rows on both), and ca's `Certification Services` audit subcategory was
+`No Auditing` with `CA\AuditFilter` unset. Both needed for four detections
+in `splunk-detections/detections/backlog.md` (three MSSQL statement-text
+detections + one ADCS issuance detection). Built as two more `tasks_from`
+entries on the existing `detection_logging` role rather than a new role —
+same Phase Q category of work, not a new finding cluster.
+
+**SQL Server (`mssql_audit` tasks_from, sql1+sql2):**
+- One Extended Events session (`detection_sql_text`) capturing
+  `sqlserver.rpc_completed` + `sqlserver.sql_batch_completed` with the
+  `sql_text`/`username`/`client_hostname` actions attached — covers
+  xp_cmdshell, xp_dirtree, and linked-server-driven execution
+  (OPENQUERY/EXECUTE AT/four-part names) in one session, since all three
+  arrive here as an RPC or batch completion with the full statement text.
+  Targets an `event_file` with no explicit path (defaults to the instance's
+  own log directory, already writable by the service account — confirmed
+  `C:\Program Files\Microsoft SQL Server\MSSQL13.MSSQLSERVER\MSSQL\Log\` on
+  sql1).
+- One Server Audit Specification (`detection_impersonation_audit`/`_spec`)
+  with `SERVER_PRINCIPAL_IMPERSONATION_GROUP` + `DATABASE_PRINCIPAL_IMPERSONATION_GROUP`,
+  for `EXECUTE AS` impersonation as structured fields rather than parsed XE
+  text. Needs an actual pre-existing directory for `FILEPATH` (unlike the XE
+  file target, there's no default) — `C:\SQLAudit`, created by
+  `create_sql_audit_dir.ps1` with an explicit `icacls` grant to
+  `CYBERHAWKS\svc-mssql` (the domain account MSSQLSERVER runs as on both
+  hosts — a freshly-created folder under `C:\` isn't otherwise writable by
+  an ordinary domain account).
+- A dedicated `svc-sqlmonitor` SQL login (SQL auth, password in the new
+  `ansible/generated/svc_sqlmonitor_password.txt`, same
+  `ansible.builtin.password` lookup pattern as `svc_mssql_password.txt`) —
+  deliberately not `svc-mssql` or another in-range attack-target account, so
+  this monitoring path isn't itself a finding. Granted `CONTROL SERVER`,
+  which both `sys.fn_xe_file_target_read_file()` and `sys.fn_get_audit_file()`
+  require per Microsoft's documented permission model for those functions —
+  there's no narrower built-in permission that unlocks them. This is a
+  defense-tooling-consumed credential (Splunk DB Connect reads the
+  generated-password file directly, same as any other file on this control
+  host), not shared via the vaulted `vault_windows_admin_password` mechanism
+  — that one's for the shared domain admin password specifically.
+- **Gotcha hit:** originally tried passing the audit `FILEPATH` through
+  `sqlcmd -v` like the password variables, but sqlcmd's own argument parser
+  mangles a value containing both a drive-letter colon and backslashes
+  (`sqlcmd -v AuditFilePath="C:\SQLAudit"` failed live with `Sqlcmd:
+  ':\SQLAudit': Invalid argument`) — worked around by hardcoding the path
+  directly in the `.sql` file instead, since it isn't a secret and doesn't
+  need to vary at runtime the way the password does.
+- **Verified live end-to-end on sql1**, not just "the objects exist": ran
+  `xp_cmdshell 'whoami /user'`, `xp_dirtree`, `EXECUTE AS LOGIN = 'sa'`, and
+  a linked-server call (`EXEC (...) AT SQL2`) as Administrator, then read
+  both logs back authenticating as `svc-sqlmonitor` (not Administrator, to
+  confirm the login's own grants are sufficient) via
+  `sys.fn_xe_file_target_read_file()` and `sys.fn_get_audit_file()` — the XE
+  session showed the full batch text (including the xp_cmdshell/xp_dirtree/
+  linked-server calls) with `username`/`client_hostname` actions attached,
+  and the audit file showed `action_id = 'IMP'`,
+  `server_principal_name = 'SQL1\Administrator'`, and
+  `statement = "EXECUTE AS LOGIN = 'sa';"` — confirmed who-impersonated-whom
+  is captured as structured fields, not just that impersonation happened.
+  sql2 spot-checked (session running, audit enabled, login present) rather
+  than re-run through the same live-fire sequence, since its config is
+  identical to sql1's and both were applied by the same idempotent script.
+
+**Certificate Services auditing (`adcs_audit` tasks_from, ca):**
+- `auditpol /set /subcategory:"Certification Services" /success:enable
+  /failure:enable` (Object Access category, same pattern as the rest of
+  `detection_logging`).
+- `certutil -setreg CA\AuditFilter 127` (1=start/stop service,
+  2=backup/restore, 4=issue/manage requests, 8=revoke/publish CRLs,
+  16=change CA security settings, 32=archive key operations, 64=change CA
+  configuration — 127 = all of them), followed by a `CertSvc` restart, which
+  only the `AuditFilter` registry change needs — the `auditpol` subcategory
+  setting is an LSA-wide policy that applies immediately, confirmed by the
+  script only restarting the service when `AuditFilter` actually changed.
+  Lands in ca's own Security log (events 4886-4899) — no new forwarder
+  config needed, `defense-tooling`'s Windows forwarder already ships that
+  log.
+- Both settings confirmed idempotent on a second run (`auditpol`/`certutil`
+  state checked before applying, no-op + no service restart the second
+  time). A live cert-issuance test to directly observe a 4886/4887 event was
+  attempted (`Get-Certificate`) but hung against this lab's WinRM/Kerberos
+  double-hop setup and was abandoned as unnecessary scope beyond what was
+  asked — the audit settings themselves were confirmed applied and
+  persistent via `auditpol`/`certutil -getreg`, which is what actually
+  gates whether those events get produced.
+
+**Not yet done:** a fresh Proxmox snapshot capturing this state on
+sql1/sql2/ca — `detection-logging-v1` above predates this follow-up.
+Deliberately left for the user to trigger (per this project's own
+"power off → snapshot → power on" convention) rather than done
+unprompted, since it means briefly taking down the live sql1/sql2/ca VMs.
+
 ## GitHub
 
 Repos: `CyberHawks-IIT/cyber-range`, `CyberHawks-IIT/AttackerVMs`,

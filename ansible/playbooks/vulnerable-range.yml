@@ -338,3 +338,21 @@
   tags: [detection_logging]
   roles:
     - demo_auditd
+
+- name: Phase Q - SQL Server telemetry (XE session, impersonation audit, monitoring login)
+  hosts: sql1,sql2
+  gather_facts: false
+  tags: [detection_logging]
+  tasks:
+    - ansible.builtin.import_role:
+        name: detection_logging
+        tasks_from: mssql_audit
+
+- name: Phase Q - Certificate Services auditing on ca
+  hosts: ca
+  gather_facts: false
+  tags: [detection_logging]
+  tasks:
+    - ansible.builtin.import_role:
+        name: detection_logging
+        tasks_from: adcs_audit
