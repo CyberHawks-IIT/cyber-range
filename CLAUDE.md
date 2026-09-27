@@ -1210,6 +1210,56 @@ directly (2026-09-27, same day) — Claude Code has no mechanism to pull an
 inline chat image out onto disk, so this had to happen by hand.
 `docs/network-and-infrastructure.md` now embeds it.
 
+## Monitoring rollout plan (2026-09-27)
+
+Five-step plan for getting from "Zeek + Splunk exist" to "detections
+actually work," spanning all three sibling repos. This section is the hub —
+each repo's own CLAUDE.md carries only the steps it owns, cross-referencing
+here for the full picture.
+
+**Monitored hosts:** the 7 `cyberhawks.lab` AD VMs (dc1, dc2, ca, web, sql1,
+sql2, workstation) + the demo service-abuse host (10.1.1.1). **Explicitly
+NOT monitored:** the `test` attacker box (10.0.2.10, VMID 350) — it's
+offense infrastructure, not something to instrument.
+
+| # | Step | Lives in | Status |
+|---|---|---|---|
+| 1 | Install the Splunk Universal Forwarder + required add-ons on every monitored host | `defense-tooling` | Not started — needs a new Windows forwarder role (only Linux exists today) |
+| 2 | Make the host-side config changes so the log sources those hosts need to *produce* actually exist (audit policy, SACLs, Sysmon, 1644 diagnostics, auditd rules) | **This repo** | Not started |
+| 3 | Configure forwarders to ship a minimal, explicit set of logs — only what's needed for named detections | `defense-tooling` | Not started — extends the same "explicit allowlist" pattern already used for Zeek's `splunk_uf_monitor_files` |
+| 4 | Organize ingested logs in Splunk (indexes, sourcetypes, macros) so they're easy to query | `defense-tooling` | Not started |
+| 5 | Implement and verify real detections against `detections/backlog.md` | `splunk-detections` | Not started — backlog itself (the design) is done |
+
+### Step 2 detail (this repo's piece)
+
+Every log source `splunk-detections/detections/backlog.md` depends on has
+to actually be turned on somewhere — most of this range's Windows hosts
+don't audit any of this by default. Needs a new Ansible role/playbook here
+(not in `defense-tooling` — that repo owns the monitoring *stack*, this one
+owns the range's *own hosts*, same split already established for the
+vulnerable-range design vs. defense-tooling's roles). Concretely, per the
+backlog:
+
+- **Audit policy subcategories**: object access (SAM/SECURITY/NTDS.dit/file
+  SACLs to actually fire), directory service access, directory service
+  changes (5136/5137), account management (4720/4728/4732/4741/4756),
+  logon/logoff (4624/4625/4768/4769/4771), process creation, other
+  object-access events (4656/4662/4663/4697/4698/7045), policy change
+  (7040/1102).
+- **SACLs to set**: `HKLM\SAM`, `HKLM\SECURITY`, `%SystemRoot%\NTDS\ntds.dit`,
+  NETLOGON share scripts, the Protect/Credentials folders (DPAPI),
+  `WinDefend`/`WdNisSvc`/`Sense` registry keys, the Default Domain Policy
+  GPO object.
+- **Sysmon**: install + a config covering Events 1, 10, 17, 18, 19, 20, 21
+  (process creation, LSASS access, named pipes, WMI event subscriptions).
+- **1644 diagnostics** on dc1/dc2: Field Engineering level, both Search
+  Time Threshold and Expensive Search Results Threshold set to 0 (see the
+  "Volume management" note already in the backlog for why this needs log
+  rotation/forwarding to not fill the local log).
+- **demo box**: equivalent `auditd` rules for the `/etc/shadow` finding.
+- Also needs: the demo box added to this repo's Ansible inventory (currently
+  only the 7 AD VMs are in `ansible/inventory/hosts.yml`).
+
 ## GitHub
 
 Repos: `CyberHawks-IIT/cyber-range`, `CyberHawks-IIT/AttackerVMs`,
