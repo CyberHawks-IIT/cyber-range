@@ -1428,11 +1428,23 @@ same Phase Q category of work, not a new finding cluster.
   persistent via `auditpol`/`certutil -getreg`, which is what actually
   gates whether those events get produced.
 
-**Not yet done:** a fresh Proxmox snapshot capturing this state on
-sql1/sql2/ca — `detection-logging-v1` above predates this follow-up.
-Deliberately left for the user to trigger (per this project's own
-"power off → snapshot → power on" convention) rather than done
-unprompted, since it means briefly taking down the live sql1/sql2/ca VMs.
+**Snapshot refreshed 2026-09-27, same day, at the user's request.** Note
+`detection-logging-v1` was **not** the snapshot to touch here — by this
+point `defense-tooling`'s own work had already added two snapshots on top
+of it (`monitoring-step3-v1`, then `monitoring-step4-v1`), so
+`monitoring-step4-v1` was the actual tip of the chain on ca/sql1/sql2.
+Followed the same "delete and retake with the same name, updated
+description" pattern used for the `domain-configured` refresh back in
+Phase E/F: `qm delsnapshot <vmid> monitoring-step4-v1`, then the usual
+power-off→snapshot→power-on cycle, description extended to note the
+SQL/CA additions on top of the original step-4 (Splunk index/sourcetype)
+content. sql1 (Server 2016, the template with the pending-update slow-
+shutdown history noted elsewhere in this file) shut down cleanly this
+time with no hang. All three confirmed back up and WinRM-reachable
+(`win_ping` succeeded) post-restart. dc1/dc2/web/workstation/demo were
+untouched — their `monitoring-step4-v1` still reflects only the original
+defense-tooling step-4 content, which is accurate since nothing in this
+follow-up touched them.
 
 ## GitHub
 
