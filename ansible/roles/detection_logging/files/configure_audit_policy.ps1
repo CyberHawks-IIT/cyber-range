@@ -31,6 +31,18 @@ try {
         @{ Name = "File System";                        Success = $true; Failure = $true  }, # 4656/4663 file SACLs
         @{ Name = "Registry";                           Success = $true; Failure = $true  }, # 4656/4657/4663 registry SACLs
         @{ Name = "Other Object Access Events";         Success = $true; Failure = $true  }, # 4697/4698
+        @{ Name = "File Share";                         Success = $true; Failure = $true  }, # 5140 (share access)
+        @{ Name = "Detailed File Share";                Success = $true; Failure = $true  }, # 5145 (per-file share access) --
+                                                                                              # confirmed live 2026-09-27: zero
+                                                                                              # 5145 events for a real
+                                                                                              # NETLOGON script read despite
+                                                                                              # 5145 already being in the
+                                                                                              # forwarder whitelist -- this
+                                                                                              # subcategory was simply never
+                                                                                              # enabled. No SACL needed on the
+                                                                                              # individual files/shares for
+                                                                                              # this one, unlike File System
+                                                                                              # auditing above.
         @{ Name = "Audit Policy Change";                Success = $true; Failure = $true  }, # policy-change coverage
         @{ Name = "Sensitive Privilege Use";            Success = $true; Failure = $true  }  # 4673/4674 -- SeBackupPrivilege
                                                                                               # (`reg save HKLM\SAM`, and any
