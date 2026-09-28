@@ -89,6 +89,70 @@ try {
         $lines += "WARNING: cyberhawks.lab DNS zone object not found under DomainDnsZones"
     }
 
+    # RBCD Configuration detection (5136 on msDS-AllowedToActOnBehalfOfOtherIdentity)
+    # -- scoped to computer2, the range's own designed RBCD-write target
+    # (see cyber-range's VULNERABLE_RANGE_PLAN.md Phase L). Same root cause
+    # as the DNS zone SACL above: no object SACL anywhere means no 5136 at
+    # all for this object.
+    $schemaNC = (Get-ADRootDSE).schemaNamingContext
+    $comp2 = Get-ADComputer -Filter "Name -eq 'computer2'" -ErrorAction SilentlyContinue
+    if ($comp2) {
+        $rbcdGuid = (Get-ADObject -SearchBase $schemaNC -Filter "lDAPDisplayName -eq 'msDS-AllowedToActOnBehalfOfOtherIdentity'" -Properties schemaIDGUID).schemaIDGUID
+        $path = "AD:\$($comp2.DistinguishedName)"
+        $acl = Get-Acl -Path $path
+        $rule = New-Object System.DirectoryServices.ActiveDirectoryAuditRule(
+            $everyone,
+            [System.DirectoryServices.ActiveDirectoryRights]::WriteProperty,
+            [System.Security.AccessControl.AuditFlags]"Success,Failure",
+            (New-Object Guid(,$rbcdGuid)))
+        $acl.AddAuditRule($rule)
+        Set-Acl -Path $path -AclObject $acl
+        $lines += "SACL set on computer2 for msDS-AllowedToActOnBehalfOfOtherIdentity"
+    } else {
+        $lines += "WARNING: computer2 not found"
+    }
+
+    # Shadow Credential Creation detection (5136 on msDS-KeyCredentialLink)
+    # -- scoped to computer3, the range's own designed Shadow-Credentials
+    # target (see VULNERABLE_RANGE_PLAN.md Phase L). Same root cause again.
+    $comp3 = Get-ADComputer -Filter "Name -eq 'computer3'" -ErrorAction SilentlyContinue
+    if ($comp3) {
+        $keyCredGuid = (Get-ADObject -SearchBase $schemaNC -Filter "lDAPDisplayName -eq 'msDS-KeyCredentialLink'" -Properties schemaIDGUID).schemaIDGUID
+        $path = "AD:\$($comp3.DistinguishedName)"
+        $acl = Get-Acl -Path $path
+        $rule = New-Object System.DirectoryServices.ActiveDirectoryAuditRule(
+            $everyone,
+            [System.DirectoryServices.ActiveDirectoryRights]::WriteProperty,
+            [System.Security.AccessControl.AuditFlags]"Success,Failure",
+            (New-Object Guid(,$keyCredGuid)))
+        $acl.AddAuditRule($rule)
+        Set-Acl -Path $path -AclObject $acl
+        $lines += "SACL set on computer3 for msDS-KeyCredentialLink"
+    } else {
+        $lines += "WARNING: computer3 not found"
+    }
+
+    # ScriptPath Attribute Tampering detection (5136 on scriptPath) -- not
+    # tied to one pre-designed target the way RBCD/Shadow Creds are (any
+    # user's scriptPath could be tampered with), so this one is scoped
+    # domain-wide with inheritance restricted to user-class descendants
+    # rather than to a single object.
+    $scriptPathGuid = (Get-ADObject -SearchBase $schemaNC -Filter "lDAPDisplayName -eq 'scriptPath'" -Properties schemaIDGUID).schemaIDGUID
+    $userClassGuid = (Get-ADObject -SearchBase $schemaNC -Filter "lDAPDisplayName -eq 'user' -and objectClass -eq 'classSchema'" -Properties schemaIDGUID).schemaIDGUID
+    $domainDn = (Get-ADDomain).DistinguishedName
+    $path = "AD:\$domainDn"
+    $acl = Get-Acl -Path $path
+    $rule = New-Object System.DirectoryServices.ActiveDirectoryAuditRule(
+        $everyone,
+        [System.DirectoryServices.ActiveDirectoryRights]::WriteProperty,
+        [System.Security.AccessControl.AuditFlags]"Success,Failure",
+        (New-Object Guid(,$scriptPathGuid)),
+        [System.DirectoryServices.ActiveDirectorySecurityInheritance]::Descendents,
+        (New-Object Guid(,$userClassGuid)))
+    $acl.AddAuditRule($rule)
+    Set-Acl -Path $path -AclObject $acl
+    $lines += "SACL set on domain root for scriptPath on user descendants"
+
     $lines | Out-File -FilePath $resultPath
 } catch {
     "ERROR: $($_.Exception.Message)" | Out-File -FilePath $resultPath -Append
