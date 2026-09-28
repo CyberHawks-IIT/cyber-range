@@ -64,6 +64,31 @@ try {
         $lines += "WARNING: Default Domain Policy GPO object not found"
     }
 
+    # DNS zone partition -- feeds the Attacker-added DNS record detection
+    # (5137 directory service object created, under the zone). Confirmed
+    # live 2026-09-27: "Directory Service Changes" auditing being on is not
+    # enough by itself -- without ANY object SACL anywhere in the domain,
+    # 5136/5137 never fire at all, not even for the Default Domain Policy
+    # GPO change above (that SACL is what makes 5136 fire for it
+    # specifically). Same principle applies here: scoped to the zone
+    # object itself with ContainerInherit so every dnsNode record created
+    # under it gets audited, not the domain root.
+    $zone = Get-ADObject -Filter "objectClass -eq 'dnsZone' -and Name -eq 'cyberhawks.lab'" -SearchBase "DC=DomainDnsZones,DC=cyberhawks,DC=lab" -ErrorAction SilentlyContinue
+    if ($zone) {
+        $path = "AD:\$($zone.DistinguishedName)"
+        $acl = Get-Acl -Path $path
+        $rule = New-Object System.DirectoryServices.ActiveDirectoryAuditRule(
+            $everyone,
+            [System.DirectoryServices.ActiveDirectoryRights]::GenericAll,
+            [System.Security.AccessControl.AuditFlags]"Success,Failure",
+            [System.DirectoryServices.ActiveDirectorySecurityInheritance]::All)
+        $acl.AddAuditRule($rule)
+        Set-Acl -Path $path -AclObject $acl
+        $lines += "SACL set on DNS zone partition ($($zone.DistinguishedName))"
+    } else {
+        $lines += "WARNING: cyberhawks.lab DNS zone object not found under DomainDnsZones"
+    }
+
     $lines | Out-File -FilePath $resultPath
 } catch {
     "ERROR: $($_.Exception.Message)" | Out-File -FilePath $resultPath -Append
