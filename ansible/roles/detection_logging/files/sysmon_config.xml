@@ -30,27 +30,25 @@
       </ProcessAccess>
     </RuleGroup>
 
-    <!-- Events 17/18: named pipe created/connected. Scoped to exactly the
-         five pipe names the coercion-trigger detection keys off of
-         (PetitPotam/DFSCoerce/ShadowCoerce/PrinterBug; MS-EFSR binds over
-         either efsrpc or lsarpc) instead of every named pipe on the box. -->
-    <RuleGroup name="PipeEventsInclude" groupRelation="or">
-      <PipeEvent onmatch="include">
-        <PipeName condition="is">\efsrpc</PipeName>
-      </PipeEvent>
-      <PipeEvent onmatch="include">
-        <PipeName condition="is">\lsarpc</PipeName>
-      </PipeEvent>
-      <PipeEvent onmatch="include">
-        <PipeName condition="is">\netdfs</PipeName>
-      </PipeEvent>
-      <PipeEvent onmatch="include">
-        <PipeName condition="is">\FssagentRpc</PipeName>
-      </PipeEvent>
-      <PipeEvent onmatch="include">
-        <PipeName condition="is">\spoolss</PipeName>
-      </PipeEvent>
-    </RuleGroup>
+    <!-- Events 17/18 (named pipe created/connected) were tried and removed
+         2026-09-27 -- do not re-add without a new reason. The original
+         design keyed the Coercion trigger detection off Sysmon pipe events
+         for the coercion RPC calls (PetitPotam/DFSCoerce/ShadowCoerce/
+         PrinterBug/CheeseOunce). Live-tested exhaustively, including
+         fixing a real stale-config bug (the file matched this repo but the
+         running Sysmon driver had never been told to reload it) and
+         cross-checking the complete real pipe list against both
+         PetitPotam's and Coercer's actual source (efsrpc/lsarpc/samr/
+         lsass/netlogon for MS-EFSR, spoolss/netdfs/Fssagentrpc/eventlog for
+         the others) -- Event 18 (PipeConnected) never fires for a remote
+         SMB-based pipe connection regardless of which pipe name is
+         configured, confirmed via a real PetitPotam attack against dc1
+         with the complete pipe list active and Event 18 confirmed capable
+         of firing at all (for unrelated local process-to-pipe activity).
+         The working replacement is splunk-detections' "Forced
+         Authentication" detection, which watches the coerced host's own
+         resulting outbound SMB connection via Zeek's conn.log instead --
+         see that detection's YAML for the full investigation trail. -->
 
     <!-- Events 19/20/21: WMI event filter/consumer/binding created. Feeds
          the WMI-event-subscription-persistence detection. Nothing to scope
