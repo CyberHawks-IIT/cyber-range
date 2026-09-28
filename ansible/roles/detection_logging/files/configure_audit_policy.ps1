@@ -44,7 +44,7 @@ try {
                                                                                               # this one, unlike File System
                                                                                               # auditing above.
         @{ Name = "Audit Policy Change";                Success = $true; Failure = $true  }, # policy-change coverage
-        @{ Name = "Sensitive Privilege Use";            Success = $true; Failure = $true  }  # 4673/4674 -- SeBackupPrivilege
+        @{ Name = "Sensitive Privilege Use";            Success = $true; Failure = $true  }, # 4673/4674 -- SeBackupPrivilege
                                                                                               # (`reg save HKLM\SAM`, and any
                                                                                               # other backup-semantics registry/
                                                                                               # file read) does not trip the
@@ -61,6 +61,25 @@ try {
                                                                                               # Privilege Use, not Object
                                                                                               # Access. See splunk-detections
                                                                                               # CLAUDE.md for the full writeup.
+        @{ Name = "Handle Manipulation";                Success = $true; Failure = $true  }  # 4656 with Object Name populated.
+                                                                                              # Added 2026-09-28: with this ON,
+                                                                                              # RegSaveKeyEx (`reg save`) emits a
+                                                                                              # 4656 naming \REGISTRY\MACHINE\SAM
+                                                                                              # (or \SECURITY) -- the tool-
+                                                                                              # agnostic hive-export signal the
+                                                                                              # 4674 above can't give (its Object
+                                                                                              # Name is "-"). Enables the local
+                                                                                              # hive-export detection without a
+                                                                                              # process/command-line match. Note:
+                                                                                              # on DCs this also emits 4656 for
+                                                                                              # handle opens to the other SACL'd
+                                                                                              # objects (RBCD/scriptPath/DNS/
+                                                                                              # ntds.dit) -- extra Splunk volume,
+                                                                                              # not false positives (the
+                                                                                              # detection is scoped to the SAM/
+                                                                                              # SECURITY hive keys). See
+                                                                                              # splunk-detections Windows
+                                                                                              # Credential Dump (Local).
     )
 
     $lines = @()
