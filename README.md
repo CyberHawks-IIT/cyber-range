@@ -15,6 +15,20 @@ project history and decisions.
 
 [![Network diagram](docs/network-diagram.jpg)](docs/network-and-infrastructure.md)
 
+## ▶ Start here: choose your setup
+
+There are two ways to stand this up, each with a complete, copy-pasteable,
+step-by-step guide:
+
+| Setup | You get | Guide |
+|---|---|---|
+| **1 — Range only** | Just the vulnerable AD range to attack | **[docs/setup/range-only.md](docs/setup/range-only.md)** |
+| **2 — Range + defense tooling** | The range **plus** Zeek + Splunk monitoring and the detections that fire on it (Discord alerting optional) | **[docs/setup/range-with-monitoring.md](docs/setup/range-with-monitoring.md)** |
+
+Both build the same range; setup 2 just adds monitoring on top via a single
+toggle (`range_monitoring`), so you can start with setup 1 and add it later
+without rebuilding. **[Guide index →](docs/setup/README.md)**
+
 ## Part of a bigger project
 
 | Repo | Layer |
@@ -78,10 +92,17 @@ qm cloudinit dump <vmid> user
 
 ## Getting started
 
-1. Set up control-host prerequisites (SSH key, WinRM `TrustedHosts`, WSL2 + Ansible + `pywinrm`).
-2. Retrieve the shared credential (above) and store it where `ansible-vault` can read it.
-3. `cd ansible && ansible all -i inventory/hosts.yml -m win_ping` — confirm connectivity.
-4. See [CLAUDE.md](CLAUDE.md) for what's built vs. planned, and its "Open items" for what's manual vs. scripted.
+Follow the step-by-step guide for your setup — **[range-only](docs/setup/range-only.md)**
+or **[range + monitoring](docs/setup/range-with-monitoring.md)** (index:
+[docs/setup/](docs/setup/README.md)). In short, the whole build is scripted:
+
+1. `scripts/create_range_vms.sh` (on Proxmox) — clone the 7 range VMs from templates.
+2. Copy `inventory/hosts.yml.example` → `hosts.yml` and the vault example, fill them in.
+3. `ansible-playbook playbooks/base-domain.yml` — the clean domain (DCs, CA, SQL, joins).
+4. `ansible-playbook playbooks/vulnerable-range.yml` — the intentional misconfigurations
+   (add `-e range_monitoring=true` for setup 2's host-side logging).
+
+See [CLAUDE.md](CLAUDE.md) for the full project history and design decisions.
 
 ## Repository layout
 
@@ -90,11 +111,18 @@ cyber-range/
   CLAUDE.md              # running source of truth
   README.md              # this file
   docs/
+    setup/                         # ← the two step-by-step setup guides
     network-and-infrastructure.md  # full network layout + manual setup
     range-briefing.html            # student-facing handout
+  scripts/
+    create_range_vms.sh    # clone the 7 range VMs from templates
+    create_testing_vms.sh  # bulk student attacker/target VMs
   ansible/
-    inventory/hosts.yml   # the 7 range VMs, grouped by role
-    playbooks/             # provisioning/vulnerability playbooks
+    inventory/hosts.yml.example  # the 7 range VMs by role (copy to hosts.yml)
+    playbooks/
+      base-domain.yml            # clean domain build (DCs, CA, SQL, joins)
+      vulnerable-range.yml       # the intentional misconfigurations
+      detection-logging.yml      # host-side logging (setup 2; imported by the above)
     roles/
 ```
 
