@@ -5,7 +5,7 @@
     src: configure_1644.ps1
     dest: "C:\\Windows\\Temp\\configure_1644.ps1"
 
-- name: Apply 1644 LDAP diagnostics (Field Engineering, thresholds at 0)
+- name: Apply 1644 LDAP diagnostics (Field Engineering, all thresholds at 1)
   ansible.windows.win_shell: "C:\\Windows\\Temp\\configure_1644.ps1"
   register: ldap_1644_result
   changed_when: true

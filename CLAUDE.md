@@ -1252,10 +1252,13 @@ backlog:
   GPO object.
 - **Sysmon**: install + a config covering Events 1, 10, 17, 18, 19, 20, 21
   (process creation, LSASS access, named pipes, WMI event subscriptions).
-- **1644 diagnostics** on dc1/dc2: Field Engineering level, both Search
-  Time Threshold and Expensive Search Results Threshold set to 0 (see the
-  "Volume management" note already in the backlog for why this needs log
-  rotation/forwarding to not fill the local log).
+- **1644 diagnostics** on dc1/dc2: Field Engineering level 5, and Search
+  Time / Expensive / Inefficient Search Results Thresholds all set to **1**
+  (NOT 0 -- 0 means "use the default" and silently limited logging to slow
+  or unindexed searches; found + fixed 2026-09-29). Every directory search
+  then logs, including LDAPS and ADWS (loopback client, real user) -- see
+  the "Volume management" note in the backlog for why this needs log
+  rotation/forwarding to not fill the local log.
 - **demo box**: equivalent `auditd` rules for the `/etc/shadow` finding.
 - Also needs: the demo box added to this repo's Ansible inventory (currently
   only the 7 AD VMs are in `ansible/inventory/hosts.yml`).
