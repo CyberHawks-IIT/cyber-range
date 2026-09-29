@@ -109,9 +109,9 @@ Edit `inventory/hosts.yml`: set your Proxmox host IP and your SSH key path
 Fill in `vault.yml`:
 - `vault_windows_admin_password` — the shared built-in Administrator password
   baked into the templates. Get it on the Proxmox host:
-  `qm cloudinit dump <any-range-vmid> user`.
-- `vault_provision_password` — any strong password you choose for the
-  `svc-provision` automation account the build creates.
+  `qm cloudinit dump <any-range-vmid> user`. After the domain is built, the
+  domain `CYBERHAWKS\Administrator` inherits this same password, which is what
+  every playbook after `base-domain.yml` connects as.
 
 Then encrypt it and point Ansible at the vault password:
 
@@ -125,9 +125,9 @@ Set the SQL media vars in `inventory/host_vars/sql1.yml` and `sql2.yml`
 
 **Check:** `ansible-inventory -i inventory/hosts.yml --list >/dev/null && echo OK`
 parses cleanly, and
-`ansible windows_vms -i inventory/hosts.yml -m win_ping -e ansible_user=Administrator -e ansible_password=<admin-pw>`
-returns `pong` from all 7 (using the built-in Administrator, since
-`svc-provision` doesn't exist yet — the next step creates it).
+`ansible windows_vms -i inventory/hosts.yml -m win_ping -e ansible_user=Administrator`
+returns `pong` from all 7 (using the built-in local Administrator — the
+default `CYBERHAWKS\Administrator` only works once the domain is built).
 
 ### 4. Build the clean domain
 
@@ -135,18 +135,18 @@ returns `pong` from all 7 (using the built-in Administrator, since
 ansible-playbook -i inventory/hosts.yml playbooks/base-domain.yml
 ```
 
-This creates the `svc-provision` account, sets hostnames, promotes dc1 (forest
-root) and dc2, configures DNS, joins the 5 member servers, installs the
-Enterprise CA + Web Enrollment on ca, and installs SQL Server + SSMS on
-sql1/sql2. It's idempotent — safe to re-run. It reboots hosts as needed
-(promotion, joins), so it takes a while.
+This sets hostnames, promotes dc1 (forest root) and dc2, configures DNS, joins
+the 5 member servers, installs the Enterprise CA + Web Enrollment on ca, and
+installs SQL Server + SSMS on sql1/sql2. It's idempotent — safe to re-run. It
+reboots hosts as needed (promotion, joins), so it takes a while.
 
 **Check:**
 ```bash
-ansible dc1 -i inventory/hosts.yml -m win_shell -a "(Get-ADDomain).DNSRoot; (Get-ADForest).ForestMode"
+ansible dc1 -i inventory/hosts.yml -m win_shell -a "(Get-ADDomain).DNSRoot; (Get-ADForest).ForestMode" -e ansible_user=Administrator
 ```
 prints `cyberhawks.lab` / `Windows2016Forest`. `ansible windows_vms -m win_ping`
-now succeeds as the default `svc-provision` account (no `-e` overrides).
+now succeeds as the default `CYBERHAWKS\Administrator` (no `-e` overrides), since
+the hosts are domain-joined.
 
 ### 5. Build the vulnerable range
 

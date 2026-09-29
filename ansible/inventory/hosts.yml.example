@@ -39,13 +39,13 @@ all:
         ansible_connection: winrm
         ansible_winrm_transport: ntlm
         ansible_port: 5985
-        # Every playbook connects as the svc-provision local automation account
-        # (created by base-domain.yml). base-domain.yml itself overrides back to
-        # the built-in Administrator, since svc-provision doesn't exist yet on a
-        # fresh range. See group_vars/windows_vms/domain.yml and the
-        # provisioning_account role.
-        ansible_user: "{{ provisioning_account_name }}"
-        ansible_password: "{{ vault_provision_password }}"
+        # Connect as the DOMAIN Administrator for all 7 (all domain-joined).
+        # Works uniformly even on ca/sql2, whose LOCAL Administrator is
+        # LAPS-managed (LAPS never touches the domain account). base-domain.yml
+        # overrides this to the built-in LOCAL Administrator, since it builds
+        # the domain from scratch (this domain account doesn't exist yet then).
+        ansible_user: "CYBERHAWKS\\Administrator"
+        ansible_password: "{{ vault_windows_admin_password }}"
       children:
         domain_controllers:
           hosts:

@@ -7,14 +7,16 @@
 # layers the intentional misconfigurations on top. Re-running is safe -- every
 # role no-ops once its target state is reached.
 #
-# Connection: these plays connect as the built-in local Administrator (the
-# template default), because the domain and the svc-provision automation
-# account don't exist yet on a fresh range. The provisioning_account role
-# (first play) creates svc-provision, which every LATER playbook connects as
-# (the inventory default) -- so this is the one playbook that overrides back to
-# Administrator. On a fresh clone that password is the template's cloud-init
-# Administrator password; retrieve it with `qm cloudinit dump <vmid> user` and
-# put it in the vault as vault_windows_admin_password (see the setup guide).
+# Connection: these plays connect as the built-in LOCAL Administrator (the
+# template default), because the domain doesn't exist yet on a fresh range.
+# Every LATER playbook (vulnerable-range, detection-logging) connects as the
+# DOMAIN CYBERHAWKS\Administrator (the inventory default), which works
+# uniformly across all 7 once they're joined -- so this is the one playbook
+# that overrides back to the local Administrator. On a fresh clone that
+# password is the template's cloud-init Administrator password; retrieve it
+# with `qm cloudinit dump <vmid> user` and put it in the vault as
+# vault_windows_admin_password (see the setup guide). After promotion the
+# domain Administrator inherits this same shared password.
 #
 # Prerequisites: the 7 VMs exist, are powered on, have their static IPs, and
 # are reachable over WinRM as Administrator. SQL Server / SSMS media is a
@@ -32,7 +34,7 @@
   roles:
     - network_prereqs
 
-- name: Create the svc-provision automation account, then set hostnames
+- name: Set hostnames
   hosts: windows_vms
   gather_facts: false
   tags: [base]
@@ -40,7 +42,6 @@
     ansible_user: Administrator
     ansible_password: "{{ vault_windows_admin_password }}"
   roles:
-    - provisioning_account
     - windows_hostname
 
 - name: Promote dc1 as the forest root
