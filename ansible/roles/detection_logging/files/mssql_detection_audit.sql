@@ -24,10 +24,28 @@ END
 -- there is no narrower built-in server-level permission that unlocks them.
 GRANT CONTROL SERVER TO [svc-sqlmonitor];
 
--- --- Extended Events: full statement text for xp_cmdshell, xp_dirtree, and
+-- --- Extended Events: full statement text for xp_cmdshell, xp_dirtree,
 -- linked-server-driven execution (OPENQUERY/EXECUTE AT/four-part names all
 -- surface here as an RPC or SQL-batch completion with the sql_text action
--- attached) -- one session covers all three of those named detections. ---
+-- attached), and the portal Users-table read -- one session covers those
+-- four named detections. ---
+--
+-- SCOPED BY PREDICATE (2026-09-29): the session originally captured EVERY
+-- sql_batch_completed / rpc_completed (the sql_text action on all of them),
+-- which produced ~37 events/sec (2.8M rows in ~21h). fn_xe_file_target_read_file
+-- over the resulting 500 MB of rollover files could not complete within the
+-- Splunk DB Connect connection timeout, so the xe_text input failed every poll
+-- ("Connection is closed") and the checkpoint never advanced -- mssql_xe_text
+-- ingestion silently stopped and the four detections went blind. The four
+-- xe_text detections only ever match four narrow statement substrings, so the
+-- session now captures only statements containing those substrings via a
+-- like_i_sql_unicode_string predicate on the sql_text action. This cuts the
+-- capture volume by orders of magnitude, keeps fn_xe_file_target_read_file
+-- fast, and does not change what the detections can match (they filter the
+-- same substrings). Adding a new statement-text SQL detection means adding its
+-- substring here too. (Content matching in the CAPTURE layer only -- the
+-- action-based rule governs Windows process/command-line detections, not the
+-- SQL statement text that is itself the only telemetry for these techniques.)
 IF EXISTS (SELECT 1 FROM sys.dm_xe_sessions WHERE name = 'detection_sql_text')
 BEGIN
     ALTER EVENT SESSION [detection_sql_text] ON SERVER STATE = STOP;
@@ -40,9 +58,21 @@ END
 CREATE EVENT SESSION [detection_sql_text] ON SERVER
 ADD EVENT sqlserver.rpc_completed (
     ACTION (sqlserver.sql_text, sqlserver.username, sqlserver.client_hostname)
+    WHERE (
+        [sqlserver].[like_i_sql_unicode_string]([sqlserver].[sql_text], N'%xp_cmdshell%')
+        OR [sqlserver].[like_i_sql_unicode_string]([sqlserver].[sql_text], N'%xp_dirtree%')
+        OR [sqlserver].[like_i_sql_unicode_string]([sqlserver].[sql_text], N'%OPENQUERY%')
+        OR [sqlserver].[like_i_sql_unicode_string]([sqlserver].[sql_text], N'%FROM Users%')
+    )
 ),
 ADD EVENT sqlserver.sql_batch_completed (
     ACTION (sqlserver.sql_text, sqlserver.username, sqlserver.client_hostname)
+    WHERE (
+        [sqlserver].[like_i_sql_unicode_string]([sqlserver].[sql_text], N'%xp_cmdshell%')
+        OR [sqlserver].[like_i_sql_unicode_string]([sqlserver].[sql_text], N'%xp_dirtree%')
+        OR [sqlserver].[like_i_sql_unicode_string]([sqlserver].[sql_text], N'%OPENQUERY%')
+        OR [sqlserver].[like_i_sql_unicode_string]([sqlserver].[sql_text], N'%FROM Users%')
+    )
 )
 ADD TARGET package0.event_file (
     SET filename = N'detection_sql_text.xel', max_file_size = 50, max_rollover_files = 10
