@@ -153,6 +153,33 @@ try {
     Set-Acl -Path $path -AclObject $acl
     $lines += "SACL set on domain root for scriptPath on user descendants"
 
+    # DCSync detection (4662, DS-Replication-Get-Changes[-All] control-access
+    # on the domain root). Confirmed live 2026-09-28: with "Directory Service
+    # Access" auditing on but no audit ACE for the replication extended rights,
+    # a non-DC principal running DRSUAPI GetNCChanges produces ZERO 4662 --
+    # only the DCs' own machine-account replication is audited (by the default
+    # SACL). The original DCSync verification relied on an audit ACE that was
+    # applied live and lost on a later DC revert; this encodes it. Scoped to
+    # the two replication extended-right GUIDs for Everyone (This object only)
+    # so the attacker's DCSync is audited; the machine-account exclusion in the
+    # detection SPL filters the DCs' own legitimate replication back out.
+    # Read WITH -Audit so the existing root SACL (the scriptPath audit ACE set
+    # by the block above) is loaded and preserved -- Get-Acl without -Audit
+    # returns no SACL section, so a subsequent Set-Acl would REPLACE the root
+    # SACL with only the ACEs added here, silently wiping scriptPath auditing.
+    $rootPath = "AD:\$domainDn"
+    $rootAcl = Get-Acl -Path $rootPath -Audit
+    foreach ($replGuid in @("1131f6aa-9c07-11d1-f79f-00c04fc2dcd2", "1131f6ad-9c07-11d1-f79f-00c04fc2dcd2")) {
+        $rule = New-Object System.DirectoryServices.ActiveDirectoryAuditRule(
+            $everyone,
+            [System.DirectoryServices.ActiveDirectoryRights]::ExtendedRight,
+            [System.Security.AccessControl.AuditFlags]"Success,Failure",
+            (New-Object Guid($replGuid)))
+        $rootAcl.AddAuditRule($rule)
+    }
+    Set-Acl -Path $rootPath -AclObject $rootAcl
+    $lines += "SACL set on domain root for DS-Replication-Get-Changes[-All]"
+
     $lines | Out-File -FilePath $resultPath
 } catch {
     "ERROR: $($_.Exception.Message)" | Out-File -FilePath $resultPath -Append

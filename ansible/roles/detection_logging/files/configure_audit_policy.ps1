@@ -30,7 +30,19 @@ try {
         @{ Name = "Directory Service Changes";          Success = $true; Failure = $true  }, # 5136/5137
         @{ Name = "File System";                        Success = $true; Failure = $true  }, # 4656/4663 file SACLs
         @{ Name = "Registry";                           Success = $true; Failure = $true  }, # 4656/4657/4663 registry SACLs
-        @{ Name = "Other Object Access Events";         Success = $true; Failure = $true  }, # 4697/4698
+        @{ Name = "Other Object Access Events";         Success = $true; Failure = $true  }, # 4698 (scheduled task created)
+        @{ Name = "Security System Extension";          Success = $true; Failure = $true  }, # 4697 (service installed). Added
+                                                                                              # 2026-09-28: this comment used to
+                                                                                              # credit 4697 to "Other Object Access
+                                                                                              # Events" above, but 4697 is really
+                                                                                              # gated by THIS subcategory -- zero
+                                                                                              # 4697 range-wide despite it being
+                                                                                              # forwarded. 4697 (unlike System
+                                                                                              # 7045) carries the installing
+                                                                                              # account + Logon ID, which the
+                                                                                              # Service (Local) / Lateral Movement:
+                                                                                              # Service detections trace to the
+                                                                                              # creating session's 4624.
         @{ Name = "File Share";                         Success = $true; Failure = $true  }, # 5140 (share access)
         @{ Name = "Detailed File Share";                Success = $true; Failure = $true  }, # 5145 (per-file share access) --
                                                                                               # confirmed live 2026-09-27: zero
