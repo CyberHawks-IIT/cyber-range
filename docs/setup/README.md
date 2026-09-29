@@ -4,7 +4,7 @@ There are two ways to stand up this project. Pick one.
 
 | | Setup 1: Range only | Setup 2: Range + defense tooling |
 |---|---|---|
-| What you get | The vulnerable `cyberhawks.lab` AD range (7 VMs) to attack | The same range, **plus** the Zeek and Splunk monitoring stack and the detection content that fires on the attacks |
+| What you get | The vulnerable `cyberhawks.lab` range (7 VMs) to attack | The same range, **plus** the Zeek and Splunk monitoring stack and the detection content that fires on the attacks |
 | Repos needed | `cyber-range` (add `vm-templates` for an attacker box) | `cyber-range`, `defense-tooling`, `splunk-detections` (add `vm-templates`) |
 | Extra hosts | none | a Zeek sensor and a Splunk indexer (2 Debian boxes) |
 | Optional add-on | none | **Discord alerting**: every Splunk alert pushed to a Discord channel |

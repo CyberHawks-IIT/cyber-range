@@ -1,6 +1,6 @@
 # Setup 1: Range only
 
-Build just the vulnerable `cyberhawks.lab` AD range. That's 7 Windows VMs you
+Build just the vulnerable `cyberhawks.lab` range. That's 7 Windows VMs you
 attack from a Kali or Windows box, with no monitoring stack.
 
 If you want the Zeek and Splunk monitoring layer too, follow

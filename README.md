@@ -1,13 +1,15 @@
 # Cyber Range
 
-A personal cyber range for practicing how to find and fix common
-vulnerabilities. It focuses on Active Directory misconfigurations and Kerberos
-delegation abuse, with some web and SQL findings alongside, all under one
+A vulnerable cyber range for practicing how to find and fix a wide range of
+common vulnerabilities. It's built to be comprehensive. It spans Active
+Directory and Kerberos, certificate services, SQL, web, network services, and
+host privilege escalation, and it keeps growing. Everything sits under one
 in-universe company theme, **CyberHawks**.
 
-It's a 7-VM Windows Server and AD environment (`cyberhawks.lab`) on Proxmox,
-built by the Ansible in this repo. [CLAUDE.md](CLAUDE.md) is the running source
-of truth for project history and design decisions.
+The core is a 7-VM Windows Server and AD environment (`cyberhawks.lab`) on
+Proxmox, built by the Ansible in this repo, with a standalone Linux box for
+network-service and host-privilege-escalation practice. [CLAUDE.md](CLAUDE.md)
+is the running source of truth for project history and design decisions.
 
 > ## 📋 [Range briefing →](https://claude.ai/artifact/LAVSDoKzNEfconPj9NN7Jz)
 > **See exactly what you're building.** Every host, the starter credentials you
@@ -21,7 +23,7 @@ the prerequisites first, then every command, with a check after each step.
 
 | | Setup | What you get | Guide |
 |---|---|---|---|
-| **1** | Range only | The vulnerable AD range, to attack | **[range-only.md](docs/setup/range-only.md)** |
+| **1** | Range only | The vulnerable range, to attack | **[range-only.md](docs/setup/range-only.md)** |
 | **2** | Range + defense tooling | Everything in setup 1, **plus** Zeek and Splunk monitoring and the detections that fire on it. Discord alerting is optional. | **[range-with-monitoring.md](docs/setup/range-with-monitoring.md)** |
 
 Both build the same range. Setup 2 only adds monitoring on top, controlled by
@@ -30,7 +32,8 @@ monitoring later without rebuilding anything.
 
 ## The range
 
-Single AD forest **`cyberhawks.lab`** (NetBIOS `CYBERHAWKS`) on `10.0.2.0/24`:
+The core is a single AD forest **`cyberhawks.lab`** (NetBIOS `CYBERHAWKS`) on
+`10.0.2.0/24`:
 
 | Host | Role | OS | IP | Key software |
 |---|---|---|---|---|
@@ -43,15 +46,17 @@ Single AD forest **`cyberhawks.lab`** (NetBIOS `CYBERHAWKS`) on `10.0.2.0/24`:
 | workstation | Domain client | Windows 11 Pro N | .8 | |
 
 The range is built toward a specific, fully implemented set of
-misconfigurations. That includes delegation coverage, starter accounts,
-credential-leak locations, and ADCS ESC templates. See CLAUDE.md's
-**"Vulnerable AD range design"** for the full list.
+misconfigurations, from delegation and ADCS ESC templates to credential leaks
+and host privilege escalation. A separate Linux box adds network-service abuse
+(FTP, SNMP, SMB, and more) and Linux privilege escalation. The
+[range briefing](https://claude.ai/artifact/LAVSDoKzNEfconPj9NN7Jz) has the full
+findings list, and CLAUDE.md carries the design detail.
 
 ## Part of a bigger project
 
 | Repo | Layer |
 |---|---|
-| **cyber-range** *(this repo)* | The AD range |
+| **cyber-range** *(this repo)* | The vulnerable range |
 | [vm-templates](https://github.com/CyberHawks-IIT/vm-templates) | Base VM and container builds (range OS templates, attacker templates, the Splunk and Zeek containers) |
 | [defense-tooling](https://github.com/CyberHawks-IIT/defense-tooling) | Splunk and Zeek monitoring stack |
 | [splunk-detections](https://github.com/CyberHawks-IIT/splunk-detections) | Detection content for that Splunk instance |
@@ -90,7 +95,7 @@ cyber-range/
 
 ## Scope note
 
-This repo covers the AD range and the network layout it sits on. Some things are
+This repo covers the range and the network layout it sits on. Some things are
 out of scope by design. Building the base VM templates and the monitoring
 containers lives in
 [vm-templates](https://github.com/CyberHawks-IIT/vm-templates). The monitoring

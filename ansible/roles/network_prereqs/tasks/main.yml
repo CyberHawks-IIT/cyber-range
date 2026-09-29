@@ -13,23 +13,40 @@
   register: fw_result
   changed_when: true
 
-# Same reasoning as the firewall fix above: Windows Defender's real-time
-# protection is on by default and would silently block or flag a large
-# fraction of this lab's intended findings (LSASS/credential dumping, the
-# Phase J LSA-secrets finding, various tool execution) -- not a named
-# finding itself, just what makes the designed ones reachable. Standard
-# practice for intentionally-vulnerable training ranges.
-- name: Disable Windows Defender real-time protection
+# Defender runs on every range host EXCEPT workstation. workstation is the
+# local-attack practice box (host privesc, local credential dumping), so its
+# Defender real-time protection would silently block or flag those findings.
+# The servers keep Defender on.
+#
+# This only works if Tamper Protection is already OFF on workstation. Tamper
+# Protection cannot be disabled by script: writing its registry value is an
+# "unauthorized operation" even as SYSTEM (confirmed live), and it has no
+# Set-MpPreference or supported local switch. So it has to be turned off in the
+# Windows 11 template (Windows Security > Virus & threat protection > Manage
+# settings > Tamper Protection Off), once, and every clone inherits that. See
+# vm-templates docs/building-templates.md. The pre-check below fails loudly if
+# Tamper Protection is still on, rather than letting the disable silently fail.
+- name: Check Tamper Protection state on workstation
+  ansible.windows.win_shell: "(Get-MpComputerStatus).IsTamperProtected"
+  register: ws_tamper
+  changed_when: false
+  when: inventory_hostname == 'workstation'
+
+- name: Fail if Tamper Protection is still on (disable it in the Windows 11 template first)
+  ansible.builtin.fail:
+    msg: >-
+      Tamper Protection is ON on workstation, so Defender cannot be disabled by
+      script. Turn Tamper Protection off in the Windows 11 template (see
+      vm-templates docs/building-templates.md) and re-clone workstation.
+  when:
+    - inventory_hostname == 'workstation'
+    - (ws_tamper.stdout | default('') | trim | lower) == 'true'
+
+- name: Disable Windows Defender real-time protection (workstation only)
   ansible.windows.win_shell: >
     Set-MpPreference -DisableRealtimeMonitoring $true
-  register: defender_result
+  when: inventory_hostname == 'workstation'
   changed_when: true
-  failed_when: false
-
-- name: Show Defender disable result (non-fatal if Defender isn't present/manageable)
-  ansible.builtin.debug:
-    msg: "{{ defender_result.stderr | default('') }}"
-  when: defender_result.rc | default(0) != 0
 
 # dc1 (PDC Emulator) had drifted ~2 hours from real time (likely from
 # repeated snapshot/rollback cycles in this environment's history), which
