@@ -51,10 +51,6 @@ repo touches it.
   templates 300/302 sometimes skip their static-IP cloud-init on first
   boot; template 304 can hit a stale Cloudbase-Init execution-state key
   that skips networking entirely.
-- **The domain/CA/SQL build** was done by hand over WinRM, predating this
-  repo's Ansible tooling — captured in a `domain-configured` Proxmox
-  snapshot, not yet reproducible from a single playbook run. Everything
-  built *on top of* that (the vulnerable-range design) is fully scripted.
 - **Defense tooling's prerequisites** (privileged-container gotchas, the
   `snippets` storage type, Splunk's login-gated downloads) live in
   [defense-tooling's docs](https://github.com/CyberHawks-IIT/defense-tooling/tree/main/docs).
