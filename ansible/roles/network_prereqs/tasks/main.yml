@@ -94,7 +94,26 @@
 # A file-backed script (not an inline -Command) avoids a nested-quoting
 # failure in the /TR argument -- confirmed live: schtasks' own command-line
 # parser mangled the escaped inner quotes needed for -Command.
-- name: Upload the startup resync script
+#
+# Member servers (web/ca/sql1/sql2/workstation) get this too, not just the
+# DCs -- 2026-09-29. The member servers sync from the domain hierarchy
+# (NT5DS), which has the SAME cold-boot chicken-and-egg as dc2 did: the
+# secure-channel/Kerberos call to a DC for the time won't succeed until the
+# member's own clock is already within tolerance, so a member that cold-boots
+# skewed (which happens after every snapshot restore) stays skewed until
+# w32time's own slow poll eventually catches up. That window is long enough
+# that services which cache the wall clock at startup latch the WRONG time --
+# confirmed live on `web`: HTTP.SYS (kernel-mode IIS logging) latched a
+# ~1h-ahead boot-time clock and kept stamping every request with it even
+# after w32tm had corrected the OS clock and an iisreset recycled w3wp (only
+# a reboot with a correct clock clears the HTTP.SYS time cache). Future-dated
+# IIS log lines then fall outside every scheduled detection's `latest=now`
+# window -- the ESC8 / Web.config.bak detections would silently never fire.
+# The boot task force-resyncs early so the clock is correct before those
+# caches latch. Members use /rediscover (re-find the domain time peer) and a
+# longer 60s delay so the DCs are up and the secure channel is available;
+# the DCs keep /force against their external NTP peers.
+- name: Upload the startup resync script (dc1/dc2 -- external NTP, /force)
   ansible.windows.win_copy:
     content: |
       Start-Sleep -Seconds 30
@@ -102,8 +121,15 @@
     dest: "C:\\Windows\\Temp\\force_time_resync.ps1"
   when: inventory_hostname in ['dc1', 'dc2']
 
-- name: Create a startup task on dc1/dc2 that force-resyncs w32time
+- name: Upload the startup resync script (member servers -- NT5DS, /rediscover after DCs are up)
+  ansible.windows.win_copy:
+    content: |
+      Start-Sleep -Seconds 60
+      w32tm /resync /rediscover /force
+    dest: "C:\\Windows\\Temp\\force_time_resync.ps1"
+  when: inventory_hostname not in ['dc1', 'dc2']
+
+- name: Create a startup task that force-resyncs w32time on every Windows host
   ansible.windows.win_shell: >
     schtasks /Create /TN "ForceTimeResyncOnBoot" /TR "powershell.exe -ExecutionPolicy Bypass -File C:\Windows\Temp\force_time_resync.ps1" /SC ONSTART /RU "SYSTEM" /RL HIGHEST /F
-  when: inventory_hostname in ['dc1', 'dc2']
   changed_when: true
