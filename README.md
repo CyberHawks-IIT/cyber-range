@@ -10,10 +10,9 @@ managed from a Windows control host over NetBird. This repo holds the
 Ansible code and [CLAUDE.md](CLAUDE.md), the running source of truth for
 project history and decisions.
 
-> **[Network diagram](docs/network-and-infrastructure.md)** — every segment, laid out  
-> **[Range briefing](https://claude.ai/artifact/LAVSDoKzNEfconPj9NN7Jz)** — hosts, starter access, and the full findings list
-
-[![Network diagram](docs/network-diagram.jpg)](docs/network-and-infrastructure.md)
+> ### ▶ Two things to look at first
+> - **[Start here: choose your setup](#-start-here-choose-your-setup)** (just below) — pick a setup and follow its step-by-step guide.
+> - **[Range briefing](https://claude.ai/artifact/LAVSDoKzNEfconPj9NN7Jz)** — hosts, starter access, and the full findings list.
 
 ## ▶ Start here: choose your setup
 
@@ -38,9 +37,16 @@ without rebuilding. **[Guide index →](docs/setup/README.md)**
 | [defense-tooling](https://github.com/CyberHawks-IIT/defense-tooling) | Splunk + Zeek monitoring stack |
 | [splunk-detections](https://github.com/CyberHawks-IIT/splunk-detections) | Detection content for that Splunk instance |
 
-Each repo stands alone — use just this one, or combine them. Full network
-layout (how they all fit together on the shared Proxmox host): see
-[docs/network-and-infrastructure.md](docs/network-and-infrastructure.md).
+Each repo stands alone — use just this one, or combine them.
+
+> **Optional — the wider network picture.** If you want to see how everything
+> sits on the shared Proxmox host, there's a
+> [network diagram and layout doc](docs/network-and-infrastructure.md). It's a
+> suggestion, not required reading: it includes several other lab networks that
+> aren't part of either setup here, so don't let it distract from the two guides
+> above.
+>
+> [![Network diagram](docs/network-diagram.jpg)](docs/network-and-infrastructure.md)
 
 ## Architecture
 

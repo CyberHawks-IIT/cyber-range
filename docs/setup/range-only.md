@@ -51,13 +51,21 @@ defense-tooling takes for Splunk). You need, matched to each host's OS:
 - **sql1** (Windows Server 2016): SQL Server 2016 Evaluation ISO
 - **sql2** (Windows Server 2022): SQL Server 2022 Evaluation ISO
 - **SSMS** (SQL Server Management Studio) installer, for both — optional
-  (`mssql_install_ssms: false` to skip). On Server 2016 SSMS also needs
-  .NET Framework 4.7.2+ (Server 2022 already has it).
+  (set `mssql_install_ssms: false` to skip it). On Server 2016 SSMS also needs
+  .NET Framework 4.7.2+ installed first (Server 2022 already has it).
 
-Provide each either as a URL the guest downloads (`mssql_iso_url` /
-`mssql_ssms_url`) or as a file already staged on the guest
-(`mssql_iso_guest_path` / `mssql_ssms_guest_path`) — see
-`ansible/inventory/host_vars/sql1.yml` and `sql2.yml`.
+Just **download the files now** and note where they are (a URL, or a local
+path). You'll point the playbook at them in **Step 3b** below — there's nothing
+to configure at this stage. For each of the ISO and (optionally) SSMS you'll
+choose one of two ways to hand it to the SQL host:
+
+- **By URL** — the range VM downloads it itself. Easiest if you have a stable
+  download link.
+- **By staged file** — you copy the file onto the range VM first (e.g. over
+  RDP, or `scp`/`Copy-Item`), then give its path *as seen on that VM*
+  (e.g. `C:\media\sql2022.iso`).
+
+You don't need both — pick whichever is convenient per file.
 
 ---
 
@@ -120,14 +128,49 @@ ansible-vault encrypt inventory/group_vars/windows_vms/vault.yml
 # store the vault password where ansible.cfg's vault_password_file expects it
 ```
 
-Set the SQL media vars in `inventory/host_vars/sql1.yml` and `sql2.yml`
-(see Prerequisite 3).
-
 **Check:** `ansible-inventory -i inventory/hosts.yml --list >/dev/null && echo OK`
 parses cleanly, and
 `ansible windows_vms -i inventory/hosts.yml -m win_ping -e ansible_user=Administrator`
 returns `pong` from all 7 (using the built-in local Administrator — the
 default `CYBERHAWKS\Administrator` only works once the domain is built).
+
+### 3b. Point the SQL hosts at your SQL media
+
+This is where you plug in the files from Prerequisite 3. Edit these two files
+(they already exist in the repo, pre-filled with empty placeholders and
+comments):
+
+- `inventory/host_vars/sql1.yml`  → SQL Server **2016** media for sql1
+- `inventory/host_vars/sql2.yml`  → SQL Server **2022** media for sql2
+
+Each file has four variables. **Fill in exactly one of each pair** (leave the
+other as `""`):
+
+| Variable | Set it to |
+|---|---|
+| `mssql_iso_url` | a download URL for the SQL Server ISO, **or** leave `""` |
+| `mssql_iso_guest_path` | the ISO's path *on the SQL VM* (if you staged it there), **or** leave `""` |
+| `mssql_ssms_url` | a download URL for the SSMS installer, **or** leave `""` |
+| `mssql_ssms_guest_path` | the SSMS installer's path *on the SQL VM*, **or** leave `""` |
+
+Example — `inventory/host_vars/sql2.yml`, ISO by URL and SSMS staged on the VM:
+
+```yaml
+mssql_iso_url: "https://download.microsoft.com/…/SQLServer2022-x64-ENU.iso"
+mssql_iso_guest_path: ""
+mssql_ssms_url: ""
+mssql_ssms_guest_path: "C:\\media\\SSMS-Setup-ENU.exe"
+```
+
+Notes:
+- A `guest_path` is a path **on the SQL range VM**, not on your control node —
+  stage the file there first (RDP copy, `scp`, `Copy-Item`, a mounted share…).
+- A `_url` is fetched by the range VM itself, so the VM must be able to reach it.
+- To skip SSMS entirely, add `mssql_install_ssms: false` to that host's file and
+  leave both SSMS vars `""`.
+- Nothing else references these — `base-domain.yml` reads them straight from
+  these host_vars files in Step 4. If you set none and SQL isn't installed yet,
+  the playbook stops with a clear message telling you to set them here.
 
 ### 4. Build the clean domain
 
