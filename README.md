@@ -52,7 +52,7 @@ credential-leak locations, and ADCS ESC templates. See CLAUDE.md's
 | Repo | Layer |
 |---|---|
 | **cyber-range** *(this repo)* | The AD range |
-| [AttackerVMs](https://github.com/CyberHawks-IIT/AttackerVMs) | Attacker VM templates and cloudbase-init |
+| [vm-templates](https://github.com/CyberHawks-IIT/vm-templates) | Base VM and container builds (range OS templates, attacker templates, the Splunk and Zeek containers) |
 | [defense-tooling](https://github.com/CyberHawks-IIT/defense-tooling) | Splunk and Zeek monitoring stack |
 | [splunk-detections](https://github.com/CyberHawks-IIT/splunk-detections) | Detection content for that Splunk instance |
 
@@ -91,8 +91,9 @@ cyber-range/
 ## Scope note
 
 This repo covers the AD range and the network layout it sits on. Some things are
-out of scope by design. Attacker VM templates live in
-[AttackerVMs](https://github.com/CyberHawks-IIT/AttackerVMs). The monitoring
+out of scope by design. Building the base VM templates and the monitoring
+containers lives in
+[vm-templates](https://github.com/CyberHawks-IIT/vm-templates). The monitoring
 stack lives in [defense-tooling](https://github.com/CyberHawks-IIT/defense-tooling).
 Detection content lives in
 [splunk-detections](https://github.com/CyberHawks-IIT/splunk-detections).

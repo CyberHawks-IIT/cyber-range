@@ -26,7 +26,7 @@ Every step ends with a **Check** so you can confirm it worked before moving on.
   [../network-and-infrastructure.md](../network-and-infrastructure.md).
 - The four VM **templates** built and reachable, with cloud-init or
   cloudbase-init: Windows Server 2016, 2019, 2022, and Windows 11. These come
-  from the [AttackerVMs](https://github.com/CyberHawks-IIT/AttackerVMs) repo,
+  from the [vm-templates](https://github.com/CyberHawks-IIT/vm-templates) repo,
   which also builds the Kali and Windows attacker templates. Note the template
   VMIDs. The clone script defaults to `300`, `301`, `302`, and `304`, and you
   override them with `--tmpl-*`.
@@ -73,10 +73,10 @@ You don't need both. Pick whichever is convenient per file.
 ```bash
 mkdir cyberhawks && cd cyberhawks
 git clone https://github.com/CyberHawks-IIT/cyber-range.git
-git clone https://github.com/CyberHawks-IIT/AttackerVMs.git   # optional, for attacker VMs
+git clone https://github.com/CyberHawks-IIT/vm-templates.git   # optional, for attacker VMs
 ```
 
-**Check:** `ls` shows `cyber-range/` (and `AttackerVMs/`).
+**Check:** `ls` shows `cyber-range/` (and `vm-templates/`).
 
 ### 2. Create the range VMs
 
@@ -217,7 +217,7 @@ To hand students their own Kali and Windows attacker pair, use
 [scripts/create_testing_vms.sh](../../scripts/create_testing_vms.sh) on the
 Proxmox host with a roster CSV. See its `--help` and CLAUDE.md's "Student
 attacker/testing VMs". The templates come from
-[AttackerVMs](https://github.com/CyberHawks-IIT/AttackerVMs). If you're just
+[vm-templates](https://github.com/CyberHawks-IIT/vm-templates). If you're just
 attacking the range yourself, any Kali box on the range network works.
 
 ## Done

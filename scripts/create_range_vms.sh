@@ -15,7 +15,7 @@
 # CLAUDE.md's "Range VMs" table: VMIDs 320-326, the ad bridge (10.0.2.0/24),
 # 4 vCPU / 4 GB each, sql1/sql2 resized to 48 GB.
 #
-# It does NOT build the templates themselves — those come from the AttackerVMs
+# It does NOT build the templates themselves — those come from the vm-templates
 # repo / the Windows Server + Windows 11 base images (see that repo and
 # docs/network-and-infrastructure.md). Point the --tmpl-* flags at your own
 # template VMIDs if they differ from this host's defaults.

@@ -1451,7 +1451,7 @@ follow-up touched them.
 
 ## GitHub
 
-Repos: `CyberHawks-IIT/cyber-range`, `CyberHawks-IIT/AttackerVMs`,
+Repos: `CyberHawks-IIT/cyber-range`, `CyberHawks-IIT/vm-templates`,
 `CyberHawks-IIT/defense-tooling`, and `CyberHawks-IIT/splunk-detections` —
 all **public** (this file previously said cyber-range was private; corrected
 2026-09-01, confirmed via `gh repo list CyberHawks-IIT`). The latter two were
@@ -1471,7 +1471,8 @@ independent of the Windows control host being powered on.
   keys don't work for it) and `gh auth login` (device-code flow; `gh` itself
   installed straight from Debian trixie's own apt repo) were both done
   interactively by the user over SSH, not something scriptable unattended.
-- **Repos:** both cloned to `/root/cyber-range` and `/root/AttackerVMs`.
+- **Repos:** both cloned to `/root/cyber-range` and `/root/AttackerVMs`
+  (the local clone dir predates the GitHub rename to `vm-templates`).
   `/root/cyber-range` (this file) is the instance's working directory, so it
   gets the same project context as any other session here. Git identity set
   to match this control host (`RedefiningReality` / `johnthejolly@gmail.com`);

@@ -44,7 +44,7 @@ separately. It's listed here for orientation, not because this repo touches it.
 ## Manual setup this repo doesn't script
 
 - **Windows VM templates and cloudbase-init.** Built and documented in
-  [AttackerVMs](https://github.com/CyberHawks-IIT/AttackerVMs), not here.
+  [vm-templates](https://github.com/CyberHawks-IIT/vm-templates), not here.
 - **Two unfixed template bugs** (workarounds in [CLAUDE.md](../CLAUDE.md)).
   Templates 300 and 302 sometimes skip their static-IP cloud-init on first boot.
   Template 304 can hit a stale Cloudbase-Init execution-state key that skips
