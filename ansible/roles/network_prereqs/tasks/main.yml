@@ -131,13 +131,21 @@
   ansible.windows.win_copy:
     content: |
       Start-Sleep -Seconds 60
-      w32tm /resync /rediscover /force
-      # On IIS hosts, the clock is now correct but HTTP.SYS may have latched a
-      # skewed boot clock during the sleep above (future/past-dated IIS log
-      # lines -> detections miss them). Restart the HTTP driver so it re-latches
-      # the corrected time. Harmless no-op on members without IIS.
+      w32tm /resync /rediscover
+      # On IIS hosts, HTTP.SYS latches the cold-boot clock and keeps stamping
+      # IIS log lines with it even after w32time corrects the OS clock (future/
+      # past-dated lines -> detections miss them). Restart the HTTP driver so it
+      # re-latches the corrected time -- but only AFTER the clock is actually
+      # correct. `w32tm /resync` is best-effort (the background poll does the
+      # real correction, and members cap phase correction), so the generous
+      # delay below -- not the resync -- is what guarantees the clock is right
+      # before HTTP.SYS re-reads it. (Restarting HTTP too early re-latches the
+      # still-skewed clock; observed 2026-09-29 on web when the restart raced
+      # the correction.) Harmless no-op on members without IIS.
       if (Get-Service W3SVC -ErrorAction SilentlyContinue) {
-        Start-Sleep -Seconds 5
+        Start-Sleep -Seconds 150
+        w32tm /resync /rediscover
+        Start-Sleep -Seconds 10
         cmd /c "net stop http /y"
         cmd /c "net start w3svc"
         cmd /c "net start winrm"
