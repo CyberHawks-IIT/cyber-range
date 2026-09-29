@@ -365,3 +365,12 @@
     - ansible.builtin.import_role:
         name: detection_logging
         tasks_from: adcs_audit
+
+- name: Phase Q - Disable IIS log buffering on the IIS hosts (immediate log writes)
+  hosts: web,ca
+  gather_facts: false
+  tags: [detection_logging]
+  tasks:
+    - ansible.builtin.import_role:
+        name: detection_logging
+        tasks_from: iis_log_buffering

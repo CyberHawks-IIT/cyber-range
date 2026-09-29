@@ -1,0 +1,34 @@
+---
+# Runs against the IIS hosts (web, ca). Disables HTTP.SYS kernel-mode log
+# buffering so IIS access-log entries are written to disk immediately instead
+# of being held in the ~60s flush buffer. The IIS-fed detections (Web
+# Credential Read / Web.config.bak on web, Certificate Request (HTTP) / ESC8
+# on ca) are scheduled searches keyed on IIS log lines; with the default
+# buffer, an event's log line can sit undelivered for up to a minute, landing
+# outside a tight scheduled window by the time it reaches Splunk. Disabling
+# the buffer drops end-to-end request->Splunk latency to well under a minute.
+#
+# Confirmed live 2026-09-29: with DisableLogBuffering set and the HTTP service
+# recycled, a request flushed to disk within ~5s (vs up to 60s before) and
+# reached the `iis` index ~38s end to end.
+- name: Disable HTTP.SYS log buffering (immediate IIS log writes for the IIS-fed detections)
+  ansible.windows.win_regedit:
+    path: HKLM:\SYSTEM\CurrentControlSet\Services\HTTP\Parameters
+    name: DisableLogBuffering
+    data: 1
+    type: dword
+  register: iis_logbuf
+
+# HTTP.SYS reads the parameter when the driver (re)starts, so the change needs
+# an HTTP service recycle to take effect. Stopping HTTP stops its dependents
+# (W3SVC/WinRM/Spooler); restart them explicitly. Only recycle when the value
+# actually changed, so an idempotent playbook run doesn't needlessly bounce
+# IIS/WinRM. `net stop http /y` is used because Stop-Service on HTTP does not
+# reliably stop the kernel driver.
+- name: Recycle HTTP.SYS + IIS so DisableLogBuffering takes effect
+  ansible.windows.win_shell: |
+    net stop http /y
+    Start-Sleep -Seconds 2
+    Start-Service W3SVC, WinRM, Spooler
+  when: iis_logbuf is changed
+  changed_when: true
