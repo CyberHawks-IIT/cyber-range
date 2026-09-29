@@ -1,0 +1,30 @@
+---
+# Phase A3 - join the five member hosts (ca, web, sql1, sql2, workstation) to
+# cyberhawks.lab. Runs after both DCs are up and range_dns has pointed each
+# member at a DC. Idempotent: the script no-ops on an already-joined host.
+
+- name: Upload domain-join script
+  ansible.windows.win_copy:
+    src: join_domain.ps1
+    dest: "C:\\Windows\\Temp\\join_domain.ps1"
+
+- name: Join this host to the domain (idempotent)
+  ansible.windows.win_shell: >
+    C:\Windows\Temp\join_domain.ps1
+    -DomainDnsName '{{ domain_dns_name }}'
+    -DomainAdminUser '{{ domain_netbios_name }}\Administrator'
+    -DomainAdminPassword '{{ vault_windows_admin_password }}'
+  register: join_result
+  changed_when: "'RESULT=joined' in join_result.stdout"
+  no_log: true
+
+- name: Remove domain-join script
+  ansible.windows.win_file:
+    path: "C:\\Windows\\Temp\\join_domain.ps1"
+    state: absent
+
+- name: Reboot to complete domain join
+  ansible.windows.win_reboot:
+    reboot_timeout: 600
+    post_reboot_delay: 45
+  when: join_result.changed

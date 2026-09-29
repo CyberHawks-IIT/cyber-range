@@ -109,10 +109,16 @@
 # a reboot with a correct clock clears the HTTP.SYS time cache). Future-dated
 # IIS log lines then fall outside every scheduled detection's `latest=now`
 # window -- the ESC8 / Web.config.bak detections would silently never fire.
-# The boot task force-resyncs early so the clock is correct before those
-# caches latch. Members use /rediscover (re-find the domain time peer) and a
-# longer 60s delay so the DCs are up and the secure channel is available;
-# the DCs keep /force against their external NTP peers.
+# The boot task force-resyncs early, but that alone loses a race: HTTP.SYS
+# latches the skewed boot clock during the pre-resync delay (confirmed again
+# 2026-09-29 after a snapshot power-cycle -- IIS lines stamped ~1h33m in the
+# future while the OS clock, and the log FILE write time, were already
+# correct). So on IIS hosts the script also restarts the HTTP driver AFTER
+# the resync, forcing HTTP.SYS to re-latch the corrected clock -- the durable,
+# self-healing form of the manual `net stop http` remediation. Members use
+# /rediscover (re-find the domain time peer) and a longer 60s delay so the
+# DCs are up and the secure channel is available; the DCs keep /force against
+# their external NTP peers.
 - name: Upload the startup resync script (dc1/dc2 -- external NTP, /force)
   ansible.windows.win_copy:
     content: |
@@ -126,6 +132,17 @@
     content: |
       Start-Sleep -Seconds 60
       w32tm /resync /rediscover /force
+      # On IIS hosts, the clock is now correct but HTTP.SYS may have latched a
+      # skewed boot clock during the sleep above (future/past-dated IIS log
+      # lines -> detections miss them). Restart the HTTP driver so it re-latches
+      # the corrected time. Harmless no-op on members without IIS.
+      if (Get-Service W3SVC -ErrorAction SilentlyContinue) {
+        Start-Sleep -Seconds 5
+        cmd /c "net stop http /y"
+        cmd /c "net start w3svc"
+        cmd /c "net start winrm"
+        Start-Service spooler -ErrorAction SilentlyContinue
+      }
     dest: "C:\\Windows\\Temp\\force_time_resync.ps1"
   when: inventory_hostname not in ['dc1', 'dc2']
 

@@ -1,0 +1,20 @@
+---
+# Domain-wide facts for the base-domain build (base-domain.yml). These match
+# the live cyberhawks.lab forest documented in CLAUDE.md; change them here to
+# stand the range up under a different name, and the base-build roles follow.
+#
+# Secrets are NOT here -- the shared Administrator/DSRM/sa passwords come from
+# the vaulted vault_windows_admin_password (vault.yml) and the gitignored
+# generated/ files, same pattern as the vulnerable-range roles.
+
+# The local automation account every playbook connects as (created by
+# base-domain.yml). Defined here as a group var so inventory/hosts.yml can
+# reference it as ansible_user; the provisioning_account role carries the same
+# value as a role default. See that role for the full rationale.
+provisioning_account_name: svc-provision
+
+domain_dns_name: cyberhawks.lab
+domain_netbios_name: CYBERHAWKS
+# Forest/domain functional level. dc1 is Server 2016, so the forest is raised
+# no higher than Win2016 (a DC cannot host a functional level above its own OS).
+domain_functional_level: Win2016

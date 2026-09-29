@@ -1,0 +1,17 @@
+---
+# Which of the two supported setups you are building. See the two setup guides
+# linked from the README:
+#
+#   range_monitoring: false  (default)  -> "vulnerable hosts only" (option 1).
+#       vulnerable-range.yml builds just the range; no host-side detection
+#       logging is turned on.
+#
+#   range_monitoring: true              -> "vulnerable hosts + defense VMs and
+#       tooling" (option 2). vulnerable-range.yml additionally imports
+#       detection-logging.yml (Phase Q), turning on the audit policy, SACLs,
+#       Sysmon, 1644 diagnostics, RPC Firewall and SQL/CA/IIS telemetry that
+#       the Splunk detections consume. You then deploy the defense-tooling
+#       stack and splunk-detections separately (see the option-2 guide).
+#
+# Override per-run without editing this file: -e range_monitoring=true
+range_monitoring: false

@@ -1,13 +1,19 @@
-# Template for the vaulted Windows credential used by inventory/hosts.yml.
+# Template for the vaulted Windows credentials used by inventory/hosts.yml.
 #
 # 1. Copy this file to vault.yml in the same directory.
-# 2. Retrieve the current shared password by running this on the Proxmox
-#    host (do NOT commit the plaintext value anywhere):
+# 2. vault_windows_admin_password -- the shared built-in Administrator /
+#    domain Administrator / SQL sa password. Retrieve the current value by
+#    running this on the Proxmox host (do NOT commit the plaintext anywhere):
 #      qm cloudinit dump <any-vmid> user
-# 3. Fill in the real value below, then encrypt the file in place:
+# 3. vault_provision_password -- a password YOU choose for the svc-provision
+#    local automation account that base-domain.yml creates on every host and
+#    that every playbook then connects as (see the provisioning_account role).
+#    Any strong value; it isn't a range finding.
+# 4. Fill in both values below, then encrypt the file in place:
 #      ansible-vault encrypt group_vars/windows_vms/vault.yml
 #    vault.yml (encrypted) is safe to commit; this .example file is the only
 #    copy that should ever hold a real password unencrypted, and it never
 #    should.
 
 vault_windows_admin_password: "CHANGE_ME"
+vault_provision_password: "CHANGE_ME_TOO"

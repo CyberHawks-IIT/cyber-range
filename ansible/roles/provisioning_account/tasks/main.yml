@@ -1,0 +1,24 @@
+---
+# Creates the local automation account (see defaults/main.yml for the why).
+# This runs as the FIRST step of base-domain.yml, while the play is still
+# connected as the built-in Administrator -- from then on every other
+# playbook connects as this account (the inventory default), which is why it
+# must exist before anything else touches a host.
+
+- name: Upload provisioning-account script
+  ansible.windows.win_copy:
+    src: create_provisioning_account.ps1
+    dest: "C:\\Windows\\Temp\\create_provisioning_account.ps1"
+
+- name: Create/repair the local automation account
+  ansible.windows.win_shell: >
+    C:\Windows\Temp\create_provisioning_account.ps1
+    -AccountName '{{ provisioning_account_name }}'
+    -Password '{{ vault_provision_password }}'
+  register: provision_result
+  changed_when: "'RESULT=changed' in provision_result.stdout"
+
+- name: Remove provisioning-account script
+  ansible.windows.win_file:
+    path: "C:\\Windows\\Temp\\create_provisioning_account.ps1"
+    state: absent

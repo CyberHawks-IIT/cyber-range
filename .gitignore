@@ -36,3 +36,7 @@ ansible/generated/*
 .DS_Store
 Thumbs.db
 *.swp
+
+# Local inventory (copy from hosts.yml.example) -- may hold machine-specific
+# paths/IPs; the committed template is hosts.yml.example
+ansible/inventory/hosts.yml

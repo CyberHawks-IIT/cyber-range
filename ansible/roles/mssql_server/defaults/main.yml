@@ -1,0 +1,35 @@
+---
+# SQL Server base install. This role installs the Database Engine only, in
+# mixed (SQL + Windows) authentication mode, with the service running as
+# NT AUTHORITY\SYSTEM -- matching the live sql1 (2016 SP2) / sql2 (2022) build
+# in CLAUDE.md. The intentionally-vulnerable SQL config (svc-mssql service
+# account, linked servers, xp_cmdshell, etc.) is layered on later by the
+# mssql_misconfig role (vulnerable-range.yml, Phase F); this role is just the
+# clean engine + SSMS.
+#
+# SQL Server media is a DOCUMENTED MANUAL PREREQUISITE, not something this
+# role fabricates a download URL for (same stance defense-tooling takes for
+# Splunk's login-gated installers). Point mssql_iso_url at an Evaluation-
+# edition ISO you have chosen, OR stage the ISO on the guest yourself and set
+# mssql_iso_guest_path. The OS-matched Evaluation ISOs used for the live build
+# are Server 2016 -> SQL Server 2016 (SP2 slipstream), Server 2022 -> SQL
+# Server 2022. See docs/setup/range-with-monitoring.md and the range-only
+# guide for where these are obtained.
+#
+# Per-host media is set in host_vars/sql1.yml and host_vars/sql2.yml.
+mssql_iso_url: ""              # e.g. a Microsoft Evaluation ISO URL (per host)
+mssql_iso_guest_path: ""      # OR an ISO already staged on the guest
+
+mssql_features: "SQLENGINE"
+mssql_instance_name: "MSSQLSERVER"
+mssql_sysadmin_accounts:
+  - "BUILTIN\\Administrators"
+  - "CYBERHAWKS\\Administrator"
+mssql_svc_account: "NT AUTHORITY\\SYSTEM"
+
+# SSMS is an admin convenience (no range finding or detection depends on it),
+# but the live build has it on both SQL hosts, so it defaults on. Set false to
+# skip. Media, like the engine ISO, is a manual prerequisite.
+mssql_install_ssms: true
+mssql_ssms_url: ""            # SSMS installer (vs_SSMS.exe / SSMS-Setup) URL
+mssql_ssms_guest_path: ""     # OR an installer already staged on the guest

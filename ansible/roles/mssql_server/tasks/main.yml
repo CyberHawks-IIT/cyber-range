@@ -1,0 +1,131 @@
+---
+# Phase A5 - SQL Server Database Engine + SSMS on sql1/sql2. Runs after the
+# host has joined the domain (so CYBERHAWKS\Administrator is a valid sysadmin
+# principal). Idempotent: every step no-ops once SQL/SSMS are installed.
+#
+# SQL media is a manual prerequisite (see defaults/main.yml). Provide it EITHER
+# by URL (mssql_iso_url -> downloaded onto the guest) OR pre-staged on the
+# guest (mssql_iso_guest_path).
+
+- name: Assert SQL Server media was provided
+  ansible.builtin.assert:
+    that:
+      - (mssql_iso_url | length > 0) or (mssql_iso_guest_path | length > 0)
+    fail_msg: >-
+      Set mssql_iso_url or mssql_iso_guest_path (see host_vars/{{ inventory_hostname }}.yml
+      and the mssql_server role defaults). SQL Server Evaluation media is a
+      documented manual prerequisite.
+
+- name: Check whether SQL Server is already installed
+  ansible.windows.win_service_info:
+    name: "{{ mssql_instance_name }}"
+  register: mssql_svc
+
+- name: Set install-needed fact
+  ansible.builtin.set_fact:
+    mssql_need_install: "{{ not (mssql_svc.exists | default(false)) }}"
+
+- name: Install the SQL Server Database Engine
+  when: mssql_need_install
+  block:
+    - name: Download the SQL Server ISO onto the guest
+      ansible.windows.win_get_url:
+        url: "{{ mssql_iso_url }}"
+        dest: "C:\\Windows\\Temp\\sqlserver.iso"
+      when: mssql_iso_url | length > 0
+
+    - name: Resolve the ISO path on the guest
+      ansible.builtin.set_fact:
+        mssql_iso_effective_path: "{{ 'C:\\Windows\\Temp\\sqlserver.iso' if (mssql_iso_url | length > 0) else mssql_iso_guest_path }}"
+
+    - name: Check for a pending reboot from a prior interrupted setup
+      ansible.windows.win_reg_stat:
+        path: 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending'
+      register: mssql_reboot_pending
+
+    - name: Reboot first if a prior setup left a pending-reboot flag
+      ansible.windows.win_reboot:
+        reboot_timeout: 900
+        post_reboot_delay: 30
+      when: mssql_reboot_pending.stat.exists
+
+    - name: Render the unattended ConfigurationFile.ini
+      ansible.windows.win_template:
+        src: ConfigurationFile.ini.j2
+        dest: "C:\\Windows\\Temp\\SqlConfigurationFile.ini"
+
+    - name: Upload the SQL install script
+      ansible.windows.win_copy:
+        src: install_mssql.ps1
+        dest: "C:\\Windows\\Temp\\install_mssql.ps1"
+
+    - name: Run the unattended SQL Server install
+      ansible.windows.win_shell: >
+        C:\Windows\Temp\install_mssql.ps1
+        -ConfigFilePath 'C:\Windows\Temp\SqlConfigurationFile.ini'
+        -SaPassword '{{ lookup("ansible.builtin.password", playbook_dir + "/../generated/sa_password.txt", length=20, chars=["ascii_letters", "digits"]) }}'
+        -IsoPath '{{ mssql_iso_effective_path }}'
+        -InstanceName '{{ mssql_instance_name }}'
+      register: mssql_install
+      changed_when: "'RESULT=installed' in mssql_install.stdout"
+      no_log: true
+
+    - name: Remove the rendered ConfigurationFile.ini (contained no secret, but tidy up) and the downloaded ISO
+      ansible.windows.win_file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "C:\\Windows\\Temp\\SqlConfigurationFile.ini"
+        - "C:\\Windows\\Temp\\install_mssql.ps1"
+
+    - name: Remove the downloaded ISO (only if we downloaded it)
+      ansible.windows.win_file:
+        path: "C:\\Windows\\Temp\\sqlserver.iso"
+        state: absent
+      when: mssql_iso_url | length > 0
+
+- name: Install SQL Server Management Studio (optional)
+  when: mssql_install_ssms | bool
+  block:
+    - name: Assert SSMS media was provided
+      ansible.builtin.assert:
+        that:
+          - (mssql_ssms_url | length > 0) or (mssql_ssms_guest_path | length > 0)
+        fail_msg: >-
+          mssql_install_ssms is true but no SSMS installer was provided
+          (set mssql_ssms_url or mssql_ssms_guest_path, or set
+          mssql_install_ssms: false to skip).
+
+    - name: Download the SSMS installer onto the guest
+      ansible.windows.win_get_url:
+        url: "{{ mssql_ssms_url }}"
+        dest: "C:\\Windows\\Temp\\ssms-setup.exe"
+      when: mssql_ssms_url | length > 0
+
+    - name: Resolve the SSMS installer path on the guest
+      ansible.builtin.set_fact:
+        mssql_ssms_effective_path: "{{ 'C:\\Windows\\Temp\\ssms-setup.exe' if (mssql_ssms_url | length > 0) else mssql_ssms_guest_path }}"
+
+    - name: Upload the SSMS install script
+      ansible.windows.win_copy:
+        src: install_ssms.ps1
+        dest: "C:\\Windows\\Temp\\install_ssms.ps1"
+
+    - name: Run the SSMS install
+      ansible.windows.win_shell: >
+        C:\Windows\Temp\install_ssms.ps1 -InstallerPath '{{ mssql_ssms_effective_path }}'
+      register: ssms_install
+      changed_when: "'RESULT=installed' in ssms_install.stdout"
+
+    - name: Remove SSMS install script and downloaded installer
+      ansible.windows.win_file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "C:\\Windows\\Temp\\install_ssms.ps1"
+
+    - name: Remove the downloaded SSMS installer (only if we downloaded it)
+      ansible.windows.win_file:
+        path: "C:\\Windows\\Temp\\ssms-setup.exe"
+        state: absent
+      when: mssql_ssms_url | length > 0

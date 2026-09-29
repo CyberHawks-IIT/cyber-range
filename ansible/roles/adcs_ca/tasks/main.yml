@@ -1,0 +1,38 @@
+---
+# Phase A4 - AD CS Enterprise Root CA + Web Enrollment on ca. Runs after ca
+# has joined the domain. Idempotent: the script no-ops if the CA is already
+# configured. This installs the *base* CA only; the intentionally-vulnerable
+# ESC templates layered on top live in the separate adcs_esc_templates role
+# (vulnerable-range.yml, Phase H).
+
+- name: Upload CA install script
+  ansible.windows.win_copy:
+    src: install_ca.ps1
+    dest: "C:\\Windows\\Temp\\install_ca.ps1"
+
+- name: Install Enterprise Root CA + Web Enrollment (idempotent)
+  ansible.windows.win_shell: >
+    C:\Windows\Temp\install_ca.ps1
+    -CACommonName '{{ adcs_ca_common_name }}'
+    -DomainAdminUser '{{ domain_netbios_name }}\Administrator'
+    -DomainAdminPassword '{{ vault_windows_admin_password }}'
+    -ValidityYears {{ adcs_ca_validity_years }}
+  register: ca_result
+  changed_when: "'RESULT=installed' in ca_result.stdout"
+  no_log: true
+
+- name: Remove CA install script
+  ansible.windows.win_file:
+    path: "C:\\Windows\\Temp\\install_ca.ps1"
+    state: absent
+
+- name: Confirm Web Enrollment is serving certsrv
+  ansible.windows.win_uri:
+    url: "http://localhost/certsrv/"
+    method: GET
+    status_code: [200, 401]
+  register: certsrv_check
+  retries: 6
+  delay: 10
+  until: certsrv_check is succeeded
+  changed_when: false

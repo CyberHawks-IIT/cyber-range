@@ -1,0 +1,41 @@
+---
+# Phase A1 - promote dc1 as the forest root of cyberhawks.lab. Runs against
+# dc1 only. Idempotent: the script no-ops if dc1 is already a DC.
+#
+# The DSRM (Directory Services Restore Mode) password is generated once into
+# the gitignored generated/ dir, same pattern as the other range secrets, so
+# it stays stable across re-runs without being committed.
+
+- name: Upload forest-promotion script
+  ansible.windows.win_copy:
+    src: promote_forest.ps1
+    dest: "C:\\Windows\\Temp\\promote_forest.ps1"
+
+- name: Promote dc1 to forest root (idempotent)
+  ansible.windows.win_shell: >
+    C:\Windows\Temp\promote_forest.ps1
+    -DomainDnsName '{{ domain_dns_name }}'
+    -DomainNetbiosName '{{ domain_netbios_name }}'
+    -FunctionalLevel '{{ domain_functional_level }}'
+    -SafeModePassword '{{ lookup("ansible.builtin.password", playbook_dir + "/../generated/dsrm_password.txt", length=24) }}'
+  register: forest_result
+  changed_when: "'RESULT=promoted' in forest_result.stdout"
+
+- name: Remove forest-promotion script
+  ansible.windows.win_file:
+    path: "C:\\Windows\\Temp\\promote_forest.ps1"
+    state: absent
+
+- name: Reboot dc1 to finish promotion
+  ansible.windows.win_reboot:
+    reboot_timeout: 900
+    post_reboot_delay: 60
+  when: forest_result.changed
+
+- name: Wait for AD Web Services / DS to be answering after promotion
+  ansible.windows.win_shell: "Get-ADDomain -Server localhost | Select-Object -ExpandProperty DNSRoot"
+  register: addc_ready
+  until: addc_ready.rc == 0 and (addc_ready.stdout | trim | lower) == domain_dns_name | lower
+  retries: 30
+  delay: 20
+  changed_when: false

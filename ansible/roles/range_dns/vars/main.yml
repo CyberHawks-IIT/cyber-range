@@ -1,0 +1,14 @@
+---
+# Steady-state DNS client configuration for the range, matching the scheme in
+# CLAUDE.md's "Range VMs" section: each DC primaries itself and secondaries
+# the other; the five members split across the two DCs so neither DC is a hard
+# dependency. Keyed by inventory hostname; the range_dns role applies the
+# entry for whichever host it is running against.
+range_dns_servers:
+  dc1: ["10.0.2.2", "10.0.2.3"]
+  dc2: ["10.0.2.3", "10.0.2.2"]
+  ca: ["10.0.2.2", "10.0.2.3"]
+  sql1: ["10.0.2.2", "10.0.2.3"]
+  workstation: ["10.0.2.2", "10.0.2.3"]
+  web: ["10.0.2.3", "10.0.2.2"]
+  sql2: ["10.0.2.3", "10.0.2.2"]

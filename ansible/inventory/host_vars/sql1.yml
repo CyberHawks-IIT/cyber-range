@@ -1,0 +1,18 @@
+---
+# SQL Server media for sql1 (Windows Server 2016 -> SQL Server 2016, the live
+# build used the SP2 Evaluation ISO). SQL media is a manual prerequisite -- see
+# the mssql_server role defaults and the setup guide for where to obtain the
+# Evaluation ISO and SSMS installer. Fill in ONE of each pair:
+#
+#   mssql_iso_url:        a URL the guest downloads the ISO from, OR
+#   mssql_iso_guest_path: a path to an ISO you have already staged on sql1
+#
+#   mssql_ssms_url:        a URL for the SSMS installer, OR
+#   mssql_ssms_guest_path: a path to an SSMS installer staged on sql1
+#
+# Leaving both of a pair empty makes the mssql_server role stop with a clear
+# message rather than guess a download URL.
+mssql_iso_url: ""
+mssql_iso_guest_path: ""
+mssql_ssms_url: ""
+mssql_ssms_guest_path: ""

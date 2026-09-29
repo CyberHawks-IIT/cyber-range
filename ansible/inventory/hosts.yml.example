@@ -1,0 +1,73 @@
+# Copy to hosts.yml and fill in the machine-specific bits (your Proxmox host
+# IP, and the path to your SSH key as seen from wherever you run Ansible).
+# hosts.yml is gitignored; this .example is the committed template.
+#
+# The 10.0.2.x range IPs and the host->role grouping match this repo's
+# standard cyberhawks.lab layout (see CLAUDE.md / docs/network-and-infrastructure.md)
+# and normally don't need changing.
+all:
+  vars:
+    # Path to the SSH private key for the Linux hosts (proxmox-host, demo), as
+    # seen from the account that runs ansible-playbook. If your control node is
+    # WSL2 (this project's documented setup), ~ is the WSL user's home, not the
+    # Windows home -- point per-host entries at the /mnt/c/... mount instead
+    # (see demo below).
+    ansible_ssh_private_key_file: ~/.ssh/id_ed25519_cyberrange
+  children:
+    proxmox:
+      hosts:
+        proxmox-host:
+          ansible_host: YOUR_PROXMOX_HOST_IP   # e.g. 192.168.192.150
+          ansible_user: root
+
+    linux_vms:
+      hosts:
+        # The demo service-abuse box. Only present if you built it (optional,
+        # see CLAUDE.md's "Service abuse practice host"). Remove this block if
+        # you didn't.
+        demo:
+          ansible_host: 10.1.1.1
+          ansible_user: sysadmin
+          ansible_become: true
+          ansible_become_method: sudo
+          # WSL2 control node: ~ is /root, but the key lives on the Windows
+          # side, so point at its /mnt/c mount directly.
+          ansible_ssh_private_key_file: /mnt/c/Users/YOUR_USER/.ssh/id_ed25519_cyberrange
+
+    windows_vms:
+      vars:
+        ansible_connection: winrm
+        ansible_winrm_transport: ntlm
+        ansible_port: 5985
+        # Every playbook connects as the svc-provision local automation account
+        # (created by base-domain.yml). base-domain.yml itself overrides back to
+        # the built-in Administrator, since svc-provision doesn't exist yet on a
+        # fresh range. See group_vars/windows_vms/domain.yml and the
+        # provisioning_account role.
+        ansible_user: "{{ provisioning_account_name }}"
+        ansible_password: "{{ vault_provision_password }}"
+      children:
+        domain_controllers:
+          hosts:
+            dc1:
+              ansible_host: 10.0.2.2
+            dc2:
+              ansible_host: 10.0.2.3
+        certificate_authority:
+          hosts:
+            ca:
+              ansible_host: 10.0.2.4
+        web_servers:
+          hosts:
+            web:
+              ansible_host: 10.0.2.5
+        sql_servers:
+          hosts:
+            sql1:
+              ansible_host: 10.0.2.6
+            sql2:
+              ansible_host: 10.0.2.7
+        workstations:
+          hosts:
+            workstation:
+              ansible_host: 10.0.2.8

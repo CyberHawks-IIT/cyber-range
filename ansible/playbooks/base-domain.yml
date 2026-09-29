@@ -1,0 +1,104 @@
+# Builds the CLEAN cyberhawks.lab domain from freshly-cloned Windows VMs:
+# hostnames, the two-DC forest, AD CS, SQL Server, and domain-joining the
+# members. This reproduces, as idempotent Ansible, the domain build that was
+# originally done by hand over WinRM (see CLAUDE.md's "Domain build" section).
+#
+# Run this FIRST, against a fresh set of range VMs, before vulnerable-range.yml
+# layers the intentional misconfigurations on top. Re-running is safe -- every
+# role no-ops once its target state is reached.
+#
+# Connection: these plays connect as the built-in local Administrator (the
+# template default), because the domain and the svc-provision automation
+# account don't exist yet on a fresh range. The provisioning_account role
+# (first play) creates svc-provision, which every LATER playbook connects as
+# (the inventory default) -- so this is the one playbook that overrides back to
+# Administrator. On a fresh clone that password is the template's cloud-init
+# Administrator password; retrieve it with `qm cloudinit dump <vmid> user` and
+# put it in the vault as vault_windows_admin_password (see the setup guide).
+#
+# Prerequisites: the 7 VMs exist, are powered on, have their static IPs, and
+# are reachable over WinRM as Administrator. SQL Server / SSMS media is a
+# manual prerequisite (see host_vars/sql1.yml, host_vars/sql2.yml and the
+# mssql_server role). Tag-scoped like vulnerable-range.yml, e.g.:
+#   ansible-playbook playbooks/base-domain.yml --tags adcs
+
+- name: Base plumbing - firewall/SMB, Defender off, external NTP (Kerberos clock sanity)
+  hosts: windows_vms
+  gather_facts: false
+  tags: [network_prereqs]
+  vars:
+    ansible_user: Administrator
+    ansible_password: "{{ vault_windows_admin_password }}"
+  roles:
+    - network_prereqs
+
+- name: Create the svc-provision automation account, then set hostnames
+  hosts: windows_vms
+  gather_facts: false
+  tags: [base]
+  vars:
+    ansible_user: Administrator
+    ansible_password: "{{ vault_windows_admin_password }}"
+  roles:
+    - provisioning_account
+    - windows_hostname
+
+- name: Promote dc1 as the forest root
+  hosts: dc1
+  gather_facts: false
+  tags: [forest]
+  vars:
+    ansible_user: Administrator
+    ansible_password: "{{ vault_windows_admin_password }}"
+  roles:
+    - domain_forest
+
+- name: Promote dc2 as an additional domain controller
+  hosts: dc2
+  gather_facts: false
+  tags: [forest]
+  vars:
+    ansible_user: Administrator
+    ansible_password: "{{ vault_windows_admin_password }}"
+  roles:
+    - domain_controller
+
+- name: Apply the steady-state DNS client scheme to every host
+  hosts: windows_vms
+  gather_facts: false
+  tags: [dns]
+  vars:
+    ansible_user: Administrator
+    ansible_password: "{{ vault_windows_admin_password }}"
+  roles:
+    - range_dns
+
+- name: Join the member servers to the domain
+  hosts: ca,web,sql1,sql2,workstation
+  gather_facts: false
+  tags: [join]
+  vars:
+    ansible_user: Administrator
+    ansible_password: "{{ vault_windows_admin_password }}"
+  roles:
+    - domain_join
+
+- name: Install AD CS (Enterprise Root CA + Web Enrollment) on ca
+  hosts: ca
+  gather_facts: false
+  tags: [adcs]
+  vars:
+    ansible_user: Administrator
+    ansible_password: "{{ vault_windows_admin_password }}"
+  roles:
+    - adcs_ca
+
+- name: Install SQL Server + SSMS on sql1 and sql2
+  hosts: sql1,sql2
+  gather_facts: false
+  tags: [mssql]
+  vars:
+    ansible_user: Administrator
+    ansible_password: "{{ vault_windows_admin_password }}"
+  roles:
+    - mssql_server

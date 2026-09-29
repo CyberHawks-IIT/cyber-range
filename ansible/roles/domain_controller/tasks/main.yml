@@ -1,0 +1,46 @@
+---
+# Phase A2 - promote dc2 as an additional DC in cyberhawks.lab. Runs against
+# dc2 only, AFTER dc1 is a working forest root. Idempotent throughout.
+
+# dc2 must resolve the domain via dc1 before it can be promoted into it.
+# range_dns sets the steady-state scheme later; this is the pre-promotion
+# pointer at dc1 specifically.
+- name: Point dc2's DNS at dc1 for promotion
+  ansible.windows.win_dns_client:
+    adapter_names: "*"
+    dns_servers: ["10.0.2.2", "10.0.2.3"]
+
+- name: Upload DC-promotion script
+  ansible.windows.win_copy:
+    src: promote_dc.ps1
+    dest: "C:\\Windows\\Temp\\promote_dc.ps1"
+
+- name: Promote dc2 to an additional domain controller (idempotent)
+  ansible.windows.win_shell: >
+    C:\Windows\Temp\promote_dc.ps1
+    -DomainDnsName '{{ domain_dns_name }}'
+    -DomainAdminUser '{{ domain_netbios_name }}\Administrator'
+    -DomainAdminPassword '{{ vault_windows_admin_password }}'
+    -SafeModePassword '{{ lookup("ansible.builtin.password", playbook_dir + "/../generated/dsrm_password.txt", length=24) }}'
+  register: dc_result
+  changed_when: "'RESULT=promoted' in dc_result.stdout"
+  no_log: true
+
+- name: Remove DC-promotion script
+  ansible.windows.win_file:
+    path: "C:\\Windows\\Temp\\promote_dc.ps1"
+    state: absent
+
+- name: Reboot dc2 to finish promotion
+  ansible.windows.win_reboot:
+    reboot_timeout: 900
+    post_reboot_delay: 60
+  when: dc_result.changed
+
+- name: Wait for dc2's AD DS to be answering after promotion
+  ansible.windows.win_shell: "Get-ADDomain -Server localhost | Select-Object -ExpandProperty DNSRoot"
+  register: dc2_ready
+  until: dc2_ready.rc == 0 and (dc2_ready.stdout | trim | lower) == domain_dns_name | lower
+  retries: 30
+  delay: 20
+  changed_when: false

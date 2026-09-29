@@ -1,0 +1,105 @@
+# Monitoring rollout plan, step 2 (see CLAUDE.md) -- the host-side config
+# changes that make the log sources splunk-detections/detections/backlog.md
+# depends on actually get produced (audit policy, SACLs, Sysmon, 1644
+# diagnostics, RPC Firewall, SQL/CA/IIS telemetry, the demo auditd rule).
+#
+# This is ONLY needed for the "vulnerable hosts + defense VMs and tooling"
+# setup (option 2). The plain "vulnerable hosts only" setup (option 1) doesn't
+# ship or read any of these logs, so turning them on just costs performance and
+# noise. It is therefore gated behind the `range_monitoring` toggle
+# (group_vars/all.yml, default false): vulnerable-range.yml imports this
+# playbook only when range_monitoring is true, and you can also run it directly
+# for option 2:
+#   ansible-playbook playbooks/detection-logging.yml
+#   ansible-playbook playbooks/detection-logging.yml --tags detection_logging
+#
+# defense-tooling owns shipping/forwarding these logs (rollout steps 1/3/4);
+# this repo only owns turning the sources on at the host.
+
+- name: Phase Q - Advanced audit policy subcategories
+  hosts: windows_vms
+  gather_facts: false
+  tags: [detection_logging]
+  tasks:
+    - ansible.builtin.import_role:
+        name: detection_logging
+        tasks_from: audit_policy
+
+- name: Phase Q - Common SACLs (SAM/SECURITY, Defender keys, DPAPI folders)
+  hosts: windows_vms
+  gather_facts: false
+  tags: [detection_logging]
+  tasks:
+    - ansible.builtin.import_role:
+        name: detection_logging
+        tasks_from: sacls_common
+
+- name: Phase Q - DC-only SACLs (NTDS.dit, NETLOGON scripts, Default Domain Policy GPO)
+  hosts: dc1,dc2
+  gather_facts: false
+  tags: [detection_logging]
+  tasks:
+    - ansible.builtin.import_role:
+        name: detection_logging
+        tasks_from: sacls_dc
+
+- name: Phase Q - Sysmon install (Events 1, 10, 17, 18, 19, 20, 21)
+  hosts: windows_vms
+  gather_facts: false
+  tags: [detection_logging]
+  tasks:
+    - ansible.builtin.import_role:
+        name: detection_logging
+        tasks_from: sysmon
+
+- name: Phase Q - 1644 LDAP diagnostics on dc1/dc2
+  hosts: dc1,dc2
+  gather_facts: false
+  tags: [detection_logging]
+  tasks:
+    - ansible.builtin.import_role:
+        name: detection_logging
+        tasks_from: ldap_1644
+
+- name: Phase Q - RPC Firewall (coercion-RPC audit for Forced Authentication)
+  hosts: windows_vms
+  gather_facts: false
+  tags: [detection_logging]
+  tasks:
+    - ansible.builtin.import_role:
+        name: detection_logging
+        tasks_from: rpcfw
+
+- name: Phase Q - auditd rule for /etc/shadow reads on demo
+  hosts: demo
+  gather_facts: false
+  tags: [detection_logging]
+  roles:
+    - demo_auditd
+
+- name: Phase Q - SQL Server telemetry (XE session, impersonation audit, monitoring login)
+  hosts: sql1,sql2
+  gather_facts: false
+  tags: [detection_logging]
+  tasks:
+    - ansible.builtin.import_role:
+        name: detection_logging
+        tasks_from: mssql_audit
+
+- name: Phase Q - Certificate Services auditing on ca
+  hosts: ca
+  gather_facts: false
+  tags: [detection_logging]
+  tasks:
+    - ansible.builtin.import_role:
+        name: detection_logging
+        tasks_from: adcs_audit
+
+- name: Phase Q - Disable IIS log buffering on the IIS hosts (immediate log writes)
+  hosts: web,ca
+  gather_facts: false
+  tags: [detection_logging]
+  tasks:
+    - ansible.builtin.import_role:
+        name: detection_logging
+        tasks_from: iis_log_buffering

@@ -1,0 +1,11 @@
+---
+# Applies the steady-state DNS client servers for this host (see vars/main.yml).
+# Idempotent -- win_dns_client only reports changed when the ordered server
+# list actually differs from what's live. Runs after both DCs are promoted so
+# members can resolve the domain in order to join it.
+
+- name: Set DNS client servers for this host
+  ansible.windows.win_dns_client:
+    adapter_names: "*"
+    dns_servers: "{{ range_dns_servers[inventory_hostname] }}"
+  when: inventory_hostname in range_dns_servers

@@ -1,0 +1,8 @@
+---
+# SQL Server media for sql2 (Windows Server 2022 -> SQL Server 2022, the live
+# build used the 2022 Evaluation ISO). See host_vars/sql1.yml for how these
+# work; fill in ONE of each pair.
+mssql_iso_url: ""
+mssql_iso_guest_path: ""
+mssql_ssms_url: ""
+mssql_ssms_guest_path: ""
