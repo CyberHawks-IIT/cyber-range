@@ -1,0 +1,63 @@
+---
+# RPC Firewall (zeronetworks) deployment -- the coercion-RPC telemetry the
+# splunk-detections "Forced Authentication" detection consumes. Runs against
+# all windows_vms. rpcFireWall.dll is injected into the RPC server processes
+# (lsass/spoolsv/dfssvc/vss/svchost) and audits calls to the coercion
+# interfaces (MS-EFSR / MS-DFSNM / MS-RPRN / MS-FSRVP) to the Application/RPCFW
+# event channel as EventID 3, carrying the caller's source IP, InterfaceUuid,
+# and authenticated subject. RpcFw.conf is scoped to ONLY those interfaces so
+# the channel stays low-volume (the tool's default AuditOnly config audits
+# every RPC call, which is far too noisy). defense-tooling's Windows forwarder
+# ships the RPCFW channel (group_vars/splunk_forwarders_windows/monitor.yml).
+#
+# The binaries are pulled from the pinned GitHub release at deploy time (same
+# pattern as install_sysmon.ps1 downloading Sysmon), so they aren't committed
+# to this repo; only our scoped RpcFw.conf is version-controlled here.
+- name: Create RPC Firewall directory
+  ansible.windows.win_file:
+    path: C:\RPCFW
+    state: directory
+
+- name: Download RPC Firewall release (pinned)
+  ansible.windows.win_get_url:
+    url: https://github.com/zeronetworks/rpcfirewall/releases/download/v2.2.5/RPCFW_2.2.5.zip
+    dest: C:\RPCFW\RPCFW_2.2.5.zip
+
+- name: Extract RPC Firewall
+  community.windows.win_unzip:
+    src: C:\RPCFW\RPCFW_2.2.5.zip
+    dest: C:\RPCFW
+    creates: C:\RPCFW\RPCFW_2.2.5\rpcFwManager.exe
+
+- name: Stage binaries into C:\RPCFW
+  ansible.windows.win_copy:
+    src: "C:\\RPCFW\\RPCFW_2.2.5\\{{ item }}"
+    dest: "C:\\RPCFW\\{{ item }}"
+    remote_src: true
+  loop:
+    - rpcFireWall.dll
+    - rpcMessages.dll
+    - rpcFwManager.exe
+
+- name: Upload scoped RpcFw.conf (coercion interfaces only)
+  ansible.windows.win_copy:
+    src: rpcfw/RpcFw.conf
+    dest: C:\RPCFW\RpcFw.conf
+
+# /install is idempotent-safe: stop+uninstall first so a re-run cleanly
+# reinstalls the current dll/config rather than layering on a stale version
+# (the tool's own README recommends stop+uninstall before install).
+- name: Reinstall + start RPC Firewall (audit-only, coercion interfaces)
+  ansible.windows.win_shell: |
+    Set-Location C:\RPCFW
+    .\rpcFwManager.exe /stop 2>$null | Out-Null
+    .\rpcFwManager.exe /uninstall 2>$null | Out-Null
+    .\rpcFwManager.exe /install
+    .\rpcFwManager.exe /start
+    .\rpcFwManager.exe /status
+  register: rpcfw_result
+  changed_when: true
+
+- name: Show RPC Firewall status
+  ansible.builtin.debug:
+    var: rpcfw_result.stdout_lines

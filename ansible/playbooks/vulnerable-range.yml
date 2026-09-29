@@ -332,6 +332,15 @@
         name: detection_logging
         tasks_from: ldap_1644
 
+- name: Phase Q - RPC Firewall (coercion-RPC audit for Forced Authentication)
+  hosts: windows_vms
+  gather_facts: false
+  tags: [detection_logging]
+  tasks:
+    - ansible.builtin.import_role:
+        name: detection_logging
+        tasks_from: rpcfw
+
 - name: Phase Q - auditd rule for /etc/shadow reads on demo
   hosts: demo
   gather_facts: false
