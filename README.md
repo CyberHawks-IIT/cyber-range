@@ -9,6 +9,11 @@ It's a 7-VM Windows Server/AD environment (`cyberhawks.lab`) on Proxmox, driven
 by the Ansible in this repo. [CLAUDE.md](CLAUDE.md) is the running source of
 truth for project history and design decisions.
 
+> ## 📋 [Range briefing →](https://claude.ai/artifact/LAVSDoKzNEfconPj9NN7Jz)
+> **See exactly what you're building** — every host, the starter credentials
+> you're handed on day one, and the full list of findings to hunt. This is also
+> the handout for whoever attacks the range.
+
 ## Start here
 
 Pick a setup. Each guide is a complete, copy-pasteable walkthrough —
@@ -22,10 +27,6 @@ prerequisites first, then every command, with a check after each step.
 Both build the same range — setup 2 just adds monitoring on top via one toggle
 (`range_monitoring`), so you can start with setup 1 and add it later without
 rebuilding.
-
-📋 **[Range briefing](https://claude.ai/artifact/LAVSDoKzNEfconPj9NN7Jz)** — the
-hosts, starter credentials, and full findings list. Hand this to whoever's
-attacking the range.
 
 ## The range
 
