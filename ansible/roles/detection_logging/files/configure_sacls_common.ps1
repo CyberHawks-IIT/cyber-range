@@ -62,23 +62,48 @@ try {
     }
 
     # DPAPI masterkey/credential-file theft detection -- lives per profile,
-    # so audit both folders for every local profile that actually exists on
-    # this host rather than guessing which accounts have logged on.
+    # so audit every local profile that actually exists on this host rather
+    # than guessing which accounts have logged on.
+    #
+    # The SACL goes on the FILES, never the folders. Auditing the folders
+    # (the original design) was wrong twice over: (1) DPAPI creates the
+    # per-user Protect\<SID> subfolder with a protected security descriptor,
+    # so an inheritable folder ACE never propagated to the masterkey files --
+    # reading a masterkey produced no 4663 at all; and (2) the only events it
+    # did produce were ListDirectory on the folders, which false-fired on any
+    # enumeration of the profile (host inventory, Windows Search) with no
+    # credential ever read. Auditing ReadData on each file means a folder
+    # listing is silent and only an actual read of a file's DATA -- the dump --
+    # is logged. Inheritance is blocked on these folders, so the rule is
+    # applied to each existing file directly (recursively). A masterkey
+    # rotated after this run isn't covered until the role runs again, which is
+    # the deliberate trade for zero enumeration false positives on a
+    # snapshot-based range.
+    $fileAudit = New-Object System.Security.AccessControl.FileSystemAuditRule(
+        $everyone, "ReadData", "None", "None", "Success")
+    $sidType = [System.Security.Principal.SecurityIdentifier]
     Get-ChildItem "C:\Users" -Directory -ErrorAction SilentlyContinue | ForEach-Object {
-        foreach ($sub in @("AppData\Roaming\Microsoft\Protect", "AppData\Roaming\Microsoft\Credentials")) {
-            $path = Join-Path $_.FullName $sub
-            if (Test-Path $path) {
+        foreach ($sub in @("AppData\Roaming\Microsoft\Protect",
+                           "AppData\Roaming\Microsoft\Credentials",
+                           "AppData\Local\Microsoft\Credentials")) {
+            $root = Join-Path $_.FullName $sub
+            if (-not (Test-Path $root)) { continue }
+            $items = @(Get-Item -LiteralPath $root -Force) +
+                     @(Get-ChildItem -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue)
+            $set = 0
+            foreach ($it in $items) {
                 try {
-                    $acl = Get-Acl -Path $path -Audit
-                    $rule = New-Object System.Security.AccessControl.FileSystemAuditRule(
-                        $everyone, "FullControl", "ContainerInherit,ObjectInherit", "None", "Success,Failure")
-                    $acl.AddAuditRule($rule)
-                    Set-Acl -Path $path -AclObject $acl
-                    $lines += "SACL set on $path"
+                    $acl = Get-Acl -LiteralPath $it.FullName -Audit
+                    # Clear any audit ACE (inherited or explicit) so folders carry none.
+                    $acl.SetAuditRuleProtection($true, $false)
+                    foreach ($r in @($acl.GetAuditRules($true, $false, $sidType))) { [void]$acl.RemoveAuditRule($r) }
+                    if (-not $it.PSIsContainer) { $acl.AddAuditRule($fileAudit); $set++ }
+                    Set-Acl -LiteralPath $it.FullName -AclObject $acl
                 } catch {
-                    $lines += "WARNING: could not set SACL on $path : $($_.Exception.Message)"
+                    $lines += "WARNING: could not set SACL on $($it.FullName) : $($_.Exception.Message)"
                 }
             }
+            $lines += "SACL set on $set file(s) under $root"
         }
     }
 
