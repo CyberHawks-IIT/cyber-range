@@ -57,7 +57,7 @@ END
 
 CREATE EVENT SESSION [detection_sql_text] ON SERVER
 ADD EVENT sqlserver.rpc_completed (
-    ACTION (sqlserver.sql_text, sqlserver.username, sqlserver.client_hostname)
+    ACTION (sqlserver.sql_text, sqlserver.username, sqlserver.client_hostname, sqlserver.session_id)
     WHERE (
         [sqlserver].[like_i_sql_unicode_string]([sqlserver].[sql_text], N'%xp_cmdshell%')
         OR [sqlserver].[like_i_sql_unicode_string]([sqlserver].[sql_text], N'%xp_dirtree%')
@@ -66,7 +66,7 @@ ADD EVENT sqlserver.rpc_completed (
     )
 ),
 ADD EVENT sqlserver.sql_batch_completed (
-    ACTION (sqlserver.sql_text, sqlserver.username, sqlserver.client_hostname)
+    ACTION (sqlserver.sql_text, sqlserver.username, sqlserver.client_hostname, sqlserver.session_id)
     WHERE (
         [sqlserver].[like_i_sql_unicode_string]([sqlserver].[sql_text], N'%xp_cmdshell%')
         OR [sqlserver].[like_i_sql_unicode_string]([sqlserver].[sql_text], N'%xp_dirtree%')
@@ -111,10 +111,21 @@ WITH (QUEUE_DELAY = 1000, ON_FAILURE = CONTINUE);
 
 ALTER SERVER AUDIT [detection_impersonation_audit] WITH (STATE = ON);
 
+-- SUCCESSFUL_LOGIN_GROUP (2026-09-30): the SQL detections' attacker IP.
+-- Neither the audit rows (no client_ip column on sql1's SQL 2016) nor the XE
+-- events (no client_net_address action on these builds) carry the client's
+-- address, so the detections used to guess it from Zeek's most recent 1433
+-- connection to the server -- wrong whenever two clients are connected at
+-- once. A login audit record carries the session_id and, in its
+-- additional_information XML, the client's <address>. The detections join an
+-- audit/XE event to the latest login for the same server + session_id at or
+-- before it: exact, since a session_id can't be reused while its session is
+-- still open. (The XE session above records session_id for the same reason.)
 CREATE SERVER AUDIT SPECIFICATION [detection_impersonation_audit_spec]
 FOR SERVER AUDIT [detection_impersonation_audit]
 ADD (SERVER_PRINCIPAL_IMPERSONATION_GROUP),
-ADD (DATABASE_PRINCIPAL_IMPERSONATION_GROUP)
+ADD (DATABASE_PRINCIPAL_IMPERSONATION_GROUP),
+ADD (SUCCESSFUL_LOGIN_GROUP)
 WITH (STATE = ON);
 
 PRINT 'sql detection logging applied';
