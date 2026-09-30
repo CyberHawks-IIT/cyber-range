@@ -130,9 +130,22 @@ Push every triggered Splunk alert to a Discord channel as a rich embed.
    it. Each embed's title and fields come from the detection's own definition in
    `splunk-detections`. See
    [defense-tooling's Discord docs](https://github.com/CyberHawks-IIT/defense-tooling/blob/main/docs/discord-alerting.md).
+3. On the Proxmox host, install the attacker directory. It names the attacker
+   behind each alert, using the Proxmox users that have `PVEVMAdmin` on attacker
+   VMs and those VMs' cloud-init IPs:
 
-**Check:** re-run the attack from step D. The alert now also lands in your
-Discord channel, with the attacker's IP and the detection's fields.
+   ```bash
+   python3 defense-tooling/scripts/proxmox/attacker-directory.py install
+   ```
+
+   Pass `--ct <id>` if your Splunk indexer is not container 510. To give an
+   attacker an extra IP that Proxmox doesn't know about, such as their own
+   machine on NetBird, run `cyberhawks-attackers add <user> <ip>`.
+
+**Check:** `cyberhawks-attackers list` shows each attacker VM's IP with its
+owner's name. Re-run the attack from step D. The alert now also lands in your
+Discord channel, titled with the alert name, described as the attacker's name
+and IP (for example `John Ford (192.168.1.11)`), with the detection's fields.
 
 ## Done
 
