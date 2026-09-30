@@ -1,17 +1,18 @@
----
-# Runs against the IIS hosts (web, ca). Disables HTTP.SYS kernel-mode log
-# buffering so IIS access-log entries are written to disk immediately instead
-# of being held in the ~60s flush buffer. The IIS-fed detections (Web
-# Credential Read / Web.config.bak on web, Certificate Request (HTTP) / ESC8
-# on ca) are scheduled searches keyed on IIS log lines; with the default
-# buffer, an event's log line can sit undelivered for up to a minute, landing
-# outside a tight scheduled window by the time it reaches Splunk. Disabling
-# the buffer drops end-to-end request->Splunk latency to well under a minute.
+# Runs against the IIS hosts (web, ca). Gets each IIS request to Splunk within
+# seconds for the IIS-fed detections (Web Credential Read / Web.config.bak on
+# web, Certificate Request (HTTP) / ESC8 on ca).
 #
-# Confirmed live 2026-09-29: with DisableLogBuffering set and the HTTP service
-# recycled, a request flushed to disk within ~5s (vs up to 60s before) and
-# reached the `iis` index ~38s end to end.
-- name: Disable HTTP.SYS log buffering (immediate IIS log writes for the IIS-fed detections)
+# The W3C log FILES can't do that: HTTP.SYS writes them in batches of up to
+# ~60s. Re-tested live 2026-09-30 on web: with DisableLogBuffering set and
+# HTTP.SYS recycled, and separately with IIS 10's flushByEntryCountW3CLog = 1
+# plus an iisreset, requests still took 20-55s to reach the file. (The
+# 2026-09-29 note that DisableLogBuffering got this to ~5s was wrong.) So IIS
+# also sends every request to ETW (logTargetW3C = "File,ETW"), which lands in
+# the Microsoft-IIS-Logging/Logs event channel as event 6200 within about a
+# second, and defense-tooling forwards that channel instead of the files.
+# DisableLogBuffering is still set: it costs nothing and keeps the files as
+# current as HTTP.SYS allows for anyone reading them on the host.
+- name: Disable HTTP.SYS log buffering (keeps the W3C files as current as HTTP.SYS allows)
   ansible.windows.win_regedit:
     path: HKLM:\SYSTEM\CurrentControlSet\Services\HTTP\Parameters
     name: DisableLogBuffering
@@ -32,3 +33,26 @@
     Start-Service W3SVC, WinRM, Spooler
   when: iis_logbuf is changed
   changed_when: true
+
+# The channel ships disabled; IIS's ETW events go nowhere until it is enabled.
+# `wevtutil gl` prints "enabled: true" once it is.
+- name: Enable the Microsoft-IIS-Logging/Logs event channel
+  ansible.windows.win_shell: |
+    $state = wevtutil gl "Microsoft-IIS-Logging/Logs" | Select-String '^enabled: true'
+    if ($state) { 'unchanged' } else { wevtutil sl "Microsoft-IIS-Logging/Logs" /e:true; 'changed' }
+  register: iis_etw_channel
+  changed_when: "'changed' in iis_etw_channel.stdout"
+
+# Site defaults, so every site on the host (web's Default Web Site, ca's
+# CertSrv under it) logs to both the W3C file and ETW. Applied live by IIS,
+# no restart needed.
+- name: Log IIS requests to ETW as well as the W3C files
+  ansible.windows.win_shell: |
+    $appcmd = "$env:windir\system32\inetsrv\appcmd.exe"
+    $cur = (& $appcmd list config -section:system.applicationHost/sites /text:siteDefaults.logFile.logTargetW3C).Trim()
+    if ($cur -eq 'File, ETW') { 'unchanged' } else {
+      & $appcmd set config -section:system.applicationHost/sites "/siteDefaults.logFile.logTargetW3C:File,ETW" /commit:apphost | Out-Null
+      'changed'
+    }
+  register: iis_etw_target
+  changed_when: "'changed' in iis_etw_target.stdout"
