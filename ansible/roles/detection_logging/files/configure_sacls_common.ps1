@@ -107,6 +107,27 @@ try {
         }
     }
 
+    # SAM/SECURITY hive-FILE theft via VSS shadow copy. The live hive files
+    # are locked, so attackers copy them out of a shadow copy
+    # (\Device\HarddiskVolumeShadowCopyN\Windows\System32\config\SAM). The
+    # shadow copy inherits the file's security descriptor, so a ReadData SACL
+    # on the on-disk hive file makes that read emit a 4663 naming the shadow
+    # path -- the same file-SACL technique NTDS.dit Extraction uses. This
+    # covers the "shadow copy" method; the HKLM\SAM|SECURITY registry-key
+    # SACLs above cover the direct-registry query/export methods. SYSTEM can
+    # set a SACL on the locked hive files (SD write, not data access).
+    foreach ($hiveFile in @("C:\Windows\System32\config\SAM",
+                            "C:\Windows\System32\config\SECURITY")) {
+        try {
+            $acl = Get-Acl -LiteralPath $hiveFile -Audit
+            $acl.AddAuditRule($fileAudit)
+            Set-Acl -LiteralPath $hiveFile -AclObject $acl
+            $lines += "SACL set on $hiveFile"
+        } catch {
+            $lines += "WARNING: could not set SACL on $hiveFile : $($_.Exception.Message)"
+        }
+    }
+
     $lines | Out-File -FilePath $resultPath
 } catch {
     "ERROR: $($_.Exception.Message)" | Out-File -FilePath $resultPath -Append
