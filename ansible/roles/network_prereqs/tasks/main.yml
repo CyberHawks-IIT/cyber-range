@@ -48,6 +48,21 @@
   when: inventory_hostname == 'workstation'
   changed_when: true
 
+# Root cause of the recurring ~2h cold-boot clock skew (2026-09-30): for a
+# Windows guest (ostype win*), Proxmox defaults the VM's virtual RTC to the
+# HOST's local time (pve1 = America/Chicago), and Windows reads the RTC as its
+# OWN local time. The templates shipped with Windows' default Pacific zone, so
+# every cold boot started 2h fast until w32time corrected it. Anything that
+# stamped time in that window was wrong: HTTP.SYS latched it for IIS logs (the
+# resync task below), and SQL Server wrote audit rows 2h in the future, which
+# pushed DB Connect's rising-column checkpoint 2h ahead and blinded the SQL
+# detections for 2h (seen live on sql1). Matching the guests' zone to the
+# host's makes the boot clock correct from the first instruction. The resync
+# task below stays as a backstop for real RTC drift.
+- name: Set the time zone to Central (must match the Proxmox host, whose local time is the VM RTC)
+  ansible.windows.win_timezone:
+    timezone: Central Standard Time
+
 # dc1 (PDC Emulator) had drifted ~2 hours from real time (likely from
 # repeated snapshot/rollback cycles in this environment's history), which
 # breaks Kerberos entirely (5-minute clock skew tolerance) for any client --
