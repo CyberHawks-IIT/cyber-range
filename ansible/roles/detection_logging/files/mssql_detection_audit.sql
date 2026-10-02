@@ -24,11 +24,9 @@ END
 -- there is no narrower built-in server-level permission that unlocks them.
 GRANT CONTROL SERVER TO [svc-sqlmonitor];
 
--- --- Extended Events: full statement text for xp_cmdshell, xp_dirtree,
--- linked-server-driven execution (OPENQUERY/EXECUTE AT/four-part names all
--- surface here as an RPC or SQL-batch completion with the sql_text action
--- attached), and the portal Users-table read -- one session covers those
--- four named detections. ---
+-- --- Extended Events: full statement text for xp_cmdshell, xp_dirtree and
+-- the portal Users-table read, plus an event for each real linked-server
+-- connection -- one session covers those four named detections. ---
 --
 -- SCOPED BY PREDICATE (2026-09-29): the session originally captured EVERY
 -- sql_batch_completed / rpc_completed (the sql_text action on all of them),
@@ -61,7 +59,6 @@ ADD EVENT sqlserver.rpc_completed (
     WHERE (
         [sqlserver].[like_i_sql_unicode_string]([sqlserver].[sql_text], N'%xp_cmdshell%')
         OR [sqlserver].[like_i_sql_unicode_string]([sqlserver].[sql_text], N'%xp_dirtree%')
-        OR [sqlserver].[like_i_sql_unicode_string]([sqlserver].[sql_text], N'%OPENQUERY%')
         OR [sqlserver].[like_i_sql_unicode_string]([sqlserver].[sql_text], N'%FROM Users%')
     )
 ),
@@ -70,9 +67,21 @@ ADD EVENT sqlserver.sql_batch_completed (
     WHERE (
         [sqlserver].[like_i_sql_unicode_string]([sqlserver].[sql_text], N'%xp_cmdshell%')
         OR [sqlserver].[like_i_sql_unicode_string]([sqlserver].[sql_text], N'%xp_dirtree%')
-        OR [sqlserver].[like_i_sql_unicode_string]([sqlserver].[sql_text], N'%OPENQUERY%')
         OR [sqlserver].[like_i_sql_unicode_string]([sqlserver].[sql_text], N'%FROM Users%')
     )
+),
+-- Linked-server use (2026-10-02): one event each time SQL Server opens a
+-- connection to a linked server, carrying linked_server_name. This replaced an
+-- OPENQUERY text match, which fired on a script that merely BUILT an OPENQUERY
+-- string (MSSQLHound's link enumeration on sql2, which has no links) and read
+-- the linked server name out of string-concatenation code ("' + @Var + '"),
+-- while missing four-part names and EXEC ... AT. This event only fires when a
+-- link is really used, whatever the syntax. Verified on sql1: a text-only
+-- mention -> no event; OPENQUERY, two OPENQUERYs in one batch and a four-part
+-- name -> one event each. No predicate is needed: nothing in this range uses a
+-- linked server except an attacker, so the volume is a handful of rows.
+ADD EVENT sqlserver.oledb_provider_information (
+    ACTION (sqlserver.username, sqlserver.client_hostname, sqlserver.session_id)
 )
 ADD TARGET package0.event_file (
     SET filename = N'detection_sql_text.xel', max_file_size = 50, max_rollover_files = 10
