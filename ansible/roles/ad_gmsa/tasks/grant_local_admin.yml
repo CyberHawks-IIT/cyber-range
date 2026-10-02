@@ -1,0 +1,10 @@
+---
+# Runs against ca. Makes gmsa-backup$ a local administrator on ca so that
+# retrieving its managed password (the ReadGMSAPassword finding) actually
+# yields something -- local admin / code execution on the CA host.
+- name: Add gmsa-backup$ to ca local Administrators
+  ansible.windows.win_group_membership:
+    name: Administrators
+    members:
+      - "CYBERHAWKS\\gmsa-backup$"
+    state: present

@@ -589,9 +589,10 @@ Unconstrained Delegation chain, a full MSSQL sysadmin-impersonation →
 linked-server chain, and both Kerberoasting/ASREPRoast hashes cracking to
 their designed plaintexts. Two items are flagged best-effort rather than
 fully confirmed (NTLM reflection and GPP password application on
-workstation), and one (LAPS secret retrieval on sql2) has a provably correct
-ACL grant but wasn't cleanly exploitable with the tooling available in this
-lab's control-host setup — see that file for details. The real
+workstation). (LAPS secret retrieval on sql2 was flagged here as "provably
+correct ACL grant but not cleanly exploitable"; **root-caused and fixed
+2026-10-02** — see the "LAPS read fix" subsection just below the
+misconfiguration list for the two stacked bugs and the fix.) The real
 pool-account username assignments (which pool account plays which role) are
 **not** inlined here — they live in the gitignored
 `ansible/generated/pool_accounts.csv`, generated fresh by the `ad_base_accounts`
@@ -676,12 +677,12 @@ not a precedent to follow.
 
 | Account | Password | Notes |
 |---|---|---|
-| user | `password` | a local admin on web from first boot (Unconstrained Delegation entry point), and the sole holder of every ACL-abuse right below: WriteDacl, GenericWrite, WriteProperty(KeyCredentialLink), WriteProperty(msDS-AllowedToActOnBehalfOfOtherIdentity), GenericAll on the Default Domain Policy GPO, Self on Domain Admins, ForceChangePassword, DCSync, WriteOwner, and read rights on sql2's LAPS password — one account, ten rights, because each targets a different object and none of the resulting attacks collide |
+| user | `password` | a local admin on web from first boot (Unconstrained Delegation entry point), and the sole holder of every ACL-abuse right below: WriteDacl, GenericWrite, WriteProperty(KeyCredentialLink), WriteProperty(msDS-AllowedToActOnBehalfOfOtherIdentity), GenericAll on the Default Domain Policy GPO, Self on Domain Admins, ForceChangePassword, DCSync, WriteOwner, read rights on sql2's LAPS password, and ReadGMSAPassword on `gmsa-backup$` (added 2026-10-02) — one account, eleven rights, because each targets a different object and none of the resulting attacks collide |
 | computer | `password` | the one starter *computer* account, representing that source category on its own — used as the RBCD delegation identity written into computer2's msDS-AllowedToActOnBehalfOfOtherIdentity (atypical for a real machine account, which would normally have a ~120-char random secret — set to `password` deliberately so it's an obvious, memorable "starter kit" credential) |
 
 Earlier drafts of this design also handed out user2-user4 as filler accounts;
 they're dropped — nothing in the list below needs a second starter user, and
-every one of user's ten rights already lands on a distinct target, so a
+every one of user's eleven rights already lands on a distinct target, so a
 second account would add headcount without adding coverage.
 
 ### Pool-account placeholder tracking
@@ -705,7 +706,8 @@ Per rule 6 above — the real usernames get filled in at provisioning time.
 ### Full misconfiguration list
 
 - same local Administrator password on dc1, dc2, web, sql1, and workstation, which is also the password for the Administrator domain account: S@lcianaszkot23 — ca and sql2 are the exception, see LAPS below
-- LAPS is deployed on ca and sql2 (the subset of hosts left out of the shared password above), each with its own unique, rotated local Administrator password — sql2's LAPS password-attribute ACL is misconfigured to additionally grant user read rights (a 10th right for user, alongside the nine below; its target — local admin on sql2 via the LAPS password — doesn't overlap any of them, or WebClient/NTLM reflection on workstation, or the svc-mssql-reuse route into sql2 from sql1, though it does offer a faster alternate path onto sql2 for anyone who spots the ACL first — intentional, same convergence pattern as the two ways into web's Unconstrained Delegation). This is also user's *direct* (non-chained) route onto sql2 for the delegation scenario below — no need to have gone through sql1 first.
+- LAPS is deployed on ca and sql2 (the subset of hosts left out of the shared password above), each with its own unique, rotated local Administrator password — sql2's LAPS password-attribute ACL is misconfigured to additionally grant user read rights (one of user's rights, alongside the others in this list; its target — local admin on sql2 via the LAPS password — doesn't overlap any of them, or WebClient/NTLM reflection on workstation, or the svc-mssql-reuse route into sql2 from sql1, though it does offer a faster alternate path onto sql2 for anyone who spots the ACL first — intentional, same convergence pattern as the two ways into web's Unconstrained Delegation). This is also user's *direct* (non-chained) route onto sql2 for the delegation scenario below — no need to have gone through sql1 first. **This is Windows LAPS (not legacy ms-Mcs-AdmPwd); for the grant to actually be usable, password encryption is disabled and the read ACE is written directly on sql2 — see the "LAPS read fix" subsection below for why both are required.**
+- a group Managed Service Account `gmsa-backup$` (added 2026-10-02) whose managed password user is allowed to retrieve (`PrincipalsAllowedToRetrieveManagedPassword` → user) — the classic ReadGMSAPassword abuse: user reads `msDS-ManagedPassword` over a sealed LDAP bind (gMSADumper / `netexec ... --gmsa` / bloodyAD), derives the gMSA's NT hash, and authenticates as `gmsa-backup$`, which is a local admin on ca. Distinct, non-overlapping target (a brand-new account, never a starter; ca is handed to nobody else — ca's own local admin is LAPS-only), so it converges on ca compromise by a different path than ca's LAPS, same intentional convergence pattern used elsewhere. Built by the `ad_gmsa` role (Phase D, tag `gmsa`). A usable KDS root key already exists on the forest (created 2026-08-28); the role creates one backdated 10h if absent.
 - ANONYMOUS LOGON in Windows Pre-2000 Compatible access group to allow SMB null session user enumeration
 - MSSQL on sql1 and sql2 are being run with the same domain account (svc-mssql)
 - MSSQL on sql1 configured so all **domain** users can log in (Windows Authentication / Integrated Security — not SQL auth), which also means real Kerberos service tickets to sql1's SPN are generated naturally by normal use, satisfying the delegation scenario below without any extra scaffolding
@@ -715,7 +717,7 @@ Per rule 6 above — the real usernames get filled in at provisioning time.
 - sql2's computer account (sql2$) has Constrained Delegation configured *with* protocol transition (T2A4D: `msDS-AllowedToDelegateTo` + `TRUSTED_TO_AUTH_FOR_DELEGATION`), targeting CIFS on dc1 — reached directly via user's LAPS-granted local admin on sql2 above (dump sql2$'s machine credentials, then S4U2Self+S4U2Proxy), with no need to have touched sql1 first; since the allow-list only names CIFS/dc1, this also teaches the alternate-service sname-substitution trick to pull an LDAP ticket instead and DCSync
 - 1000 users with usernames from [jsmith.txt](https://github.com/insidetrust/statistically-likely-usernames/blob/master/jsmith.txt), initialized with random 14 character passwords (excluding the literal string `password`, per the starter-access note above)
 - user and computer with password `password` — the only two starter accounts, see table above
-- user has WriteDacl on `poolUser_writedacl_target`, GenericWrite on `poolUser_genericwrite_target`, WriteProperty KeyCredentialLink on computer3, WriteProperty msDS-AllowedToActOnBehalfOfOtherIdentity on computer2, GenericAll on the "Default Domain Policy" GPO, Self on the "Domain Admins" group, ForceChangePassword on `poolUser_forcechangepw_target`, DCSync on the domain, WriteOwner on `poolUser_writeowner_target`, and read rights on sql2's LAPS password (see above) — ten rights, ten non-overlapping targets, none of them a starter account; computer (not itself targeted by anything) is the pre-provisioned source used to complete the RBCD write on computer2
+- user has WriteDacl on `poolUser_writedacl_target`, GenericWrite on `poolUser_genericwrite_target`, WriteProperty KeyCredentialLink on computer3, WriteProperty msDS-AllowedToActOnBehalfOfOtherIdentity on computer2, GenericAll on the "Default Domain Policy" GPO, Self on the "Domain Admins" group, ForceChangePassword on `poolUser_forcechangepw_target`, DCSync on the domain, WriteOwner on `poolUser_writeowner_target`, read rights on sql2's LAPS password (see above), and ReadGMSAPassword on `gmsa-backup$` (see the gMSA bullet below) — eleven rights, eleven non-overlapping targets, none of them a starter account; computer (not itself targeted by anything) is the pre-provisioned source used to complete the RBCD write on computer2
 - default `ms-DS-MachineAccountQuota` (10) is left unchanged, so students who'd rather self-create a computer account than use computer for the RBCD write above can still do so
 - Domain Admin "admin" auto starts on boot an active session on web (maybe through a script?) — `admin` is not a starter account; reaching it requires the local-admin foothold below
 - user is a local admin on web from first boot (starter access, not something to be earned)
@@ -757,6 +759,51 @@ Per rule 6 above — the real usernames get filled in at provisioning time.
 - `poolUser_ntlm_relay_smb` runs a second, separate scheduled task on the same interval, same broadcast-fallback mechanism, but over SMB instead of HTTP — and unlike the HTTP account, this one is also a local admin on workstation, so a successful relay is worth landing code execution for, not just proving the technique. Both scheduled tasks live on web; LDAP signing/channel binding is explicitly relaxed on both DCs and outbound SMB signing is explicitly not required on web, so neither relay path is blocked by a default that happened to be stricter than intended
 - at least one DC (dc1) permits unrestricted DNS zone transfer (AXFR) on the cyberhawks.lab zone to any host, unauthenticated — confirmed this is a genuinely per-DNS-server zone setting rather than something that replicates with the zone's AD-integrated record data, so dc2 stays at its default (`NoTransfer`) unless the same change is made there too
 - Cross-domain/cross-forest delegation abuse is intentionally out of scope — cyberhawks.lab is a single domain with no trusts configured
+
+### LAPS read fix (2026-10-02)
+
+The "provably correct ACL grant but not cleanly exploitable" flag on sql2's
+LAPS read (originally in the Phase L verification note) was **two stacked
+bugs**, both now fixed. Student-facing symptom was
+`netexec smb sql2.cyberhawks.lab -u user -p password --laps` returning no
+usable password.
+
+1. **Password was encrypted.** This range runs **Windows LAPS** (the in-box
+   one, attributes `msLAPS-*`; the legacy `ms-Mcs-AdmPwd` attribute isn't even
+   in the schema). At domain functional level 2016+ (this domain is
+   `Win2016`) Windows LAPS **encrypts the password by default** — DPAPI-NG,
+   decryptable only by the authorized decryptor principal (Domain Admins) —
+   and stores it in `msLAPS-EncryptedPassword`, leaving the cleartext
+   `msLAPS-Password` empty. So user (and netexec, gMSADumper, etc.) could at
+   most read an undecryptable blob. Fix: set policy
+   `ADPasswordEncryptionEnabled=0` (HKLM\Software\Microsoft\Policies\LAPS) and
+   force a rotation (`Reset-LapsPassword`) so the new password lands as
+   cleartext JSON `{n,t,p}` in `msLAPS-Password`, which is exactly what
+   `netexec --laps` parses. Baked into `roles/laps/files/enable_windows_laps.ps1`.
+2. **The read ACE was inheritance-scoped to nothing.** The grant used
+   `Set-LapsADReadPasswordPermission -Identity $sql2`. That cmdlet is designed
+   to be pointed at an **OU/container**: it writes the ACE with
+   `InheritanceType=Descendents` + `InheritedObjectType=computer`, so the right
+   is inherited by the *computer objects inside* the container. Pointed at a
+   single leaf computer object (sql2), the ACE applies only to sql2's
+   non-existent descendant computers — it shows up in a casual ACL dump
+   looking correct (ReadProperty+ExtendedRight on `msLAPS-Password`) but grants
+   **nothing effective on sql2 itself**. Fix: write a **direct** ACE on sql2
+   (`InheritanceType=None`, "this object only"). `msLAPS-Password` is a
+   confidential attribute, so the ACE needs both `ReadProperty` and
+   `ExtendedRight` (CONTROL_ACCESS) scoped to its schemaIDGUID
+   (`8411e67d-c911-43a7-ae75-7598def09900`). Rewritten in
+   `roles/ad_acls/files/grant_laps_read.ps1` (removes the old dead
+   Descendents-scoped ACEs on re-run, then adds the direct ones).
+
+Both verified live 2026-10-02: binding as user (raw sealed LDAP and
+`Get-LapsADPassword -Credential`) now returns the 20-char sql2 Administrator
+password. Applied to the live range directly over WinRM (the Set-Acl and
+New-ADServiceAccount loopback writes on the DC work over a direct NTLM WinRM
+session — no scheduled-task double-hop needed, unlike the cross-machine
+operations documented in the domain-build gotchas); the Ansible roles above
+reproduce it on a rebuild. Not yet re-snapshotted — the live state is ahead of
+`vulnerable-range-v2` until the next snapshot refresh.
 
 ### Delegation coverage recap (each type appears exactly once)
 

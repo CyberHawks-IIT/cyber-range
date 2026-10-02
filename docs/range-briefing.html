@@ -632,7 +632,7 @@
   </section>
 
   <section id="aclabuse">
-    <div class="section-head"><h2>AD Access Control</h2><span class="section-count">8 rights - all held by user</span></div>
+    <div class="section-head"><h2>AD Access Control</h2><span class="section-count">9 rights - all held by user</span></div>
     <div class="tablewrap">
       <table>
         <thead><tr><th style="width:34%">Right</th><th style="width:28%">Source</th><th>Target</th></tr></thead>
@@ -645,6 +645,7 @@
           <tr><td class="finding">GenericAll</td><td class="who">user</td><td class="target mono">Default Domain Policy GPO</td></tr>
           <tr><td class="finding">DCSync (Get-Changes + Get-Changes-All)</td><td class="who">user</td><td class="target mono">domain root</td></tr>
           <tr><td class="finding">LAPS password read</td><td class="who">user</td><td class="target mono">sql2 local Administrator</td></tr>
+          <tr><td class="finding">gMSA password read (ReadGMSAPassword)</td><td class="who">user</td><td class="target mono">gmsa-backup$ <span class="arrow">→</span> local admin on ca</td></tr>
         </tbody>
       </table>
     </div>

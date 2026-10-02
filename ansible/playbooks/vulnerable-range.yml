@@ -63,6 +63,22 @@
         name: ad_acls
         tasks_from: grant_laps_read
 
+- name: Phase D - gMSA (gmsa-backup$, ReadGMSAPassword by user)
+  hosts: dc2
+  gather_facts: false
+  tags: [gmsa]
+  roles:
+    - ad_gmsa
+
+- name: Phase D - gMSA local admin grant on ca
+  hosts: ca
+  gather_facts: false
+  tags: [gmsa]
+  tasks:
+    - ansible.builtin.import_role:
+        name: ad_gmsa
+        tasks_from: grant_local_admin
+
 - name: Phase E - Delegation (admin account, web Unconstrained Delegation)
   hosts: dc1
   gather_facts: false
