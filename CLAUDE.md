@@ -1496,6 +1496,90 @@ untouched — their `monitoring-step4-v1` still reflects only the original
 defense-tooling step-4 content, which is accurate since nothing in this
 follow-up touched them.
 
+## GPP cpassword fix + DFSR SYSVOL deadlock repair (2026-10-04)
+
+Triggered by `netexec smb dc1.cyberhawks.lab -u user -p password -M
+gpp_password` from a student Kali box failing with "Data must be padded to
+16 byte boundary in CBC mode."
+
+**1. Root cause of the netexec error — a bug in how the range *generates*
+the GPP cpassword, not in netexec.** `roles/ad_misc_findings/files/gpp_password.ps1`'s
+`ConvertTo-GppCpassword` was base64url-encoding the AES blob (`+`->`-`,
+`/`->`_`, stripped `=`). Real GPP cpassword values are **standard base64**
+and legitimately contain `+`/`/`. Decryptors (gpp-decrypt, netexec's
+gpp_password) call a *standard* base64 decode; with Python's default
+`validate=False` the stray `-`/`_` are silently dropped, leaving a byte
+count no longer a multiple of 16 -> AES-CBC padding error. Fixed to emit
+plain `[Convert]::ToBase64String(...)` (the AES setup — AES-256-CBC, zero
+IV, PKCS7, UTF-16LE — was already correct). Committed + pushed
+(`2c54c91`). Applied live by re-running the fixed script on dc1 over WinRM
+(reads the existing plaintext from `generated/gpp_local_admin_password.txt`
+so the password is unchanged); verified end-to-end — the written cpassword
+is standard base64, decodes to 48 bytes, and decrypts back to the generated
+password.
+
+**2. Discovered while confirming the fix replicated: DFSR SYSVOL
+replication between dc1 and dc2 was fully deadlocked** and had been frozen
+since ~2026-08-28 (dc2's `Groups.xml` still carried the old base64url
+version with a 28-file dc1->dc2 backlog that never drained). Diagnosis
+ruled out the usual suspects: **clocks were in sync** (both on
+time.google.com, ~3s apart — the `network_prereqs` NTP fix is working) and
+**AD replication was healthy** (`repadmin /replsummary` 0 fails both ways).
+The DFSR error was **1753 (EPT_S_NOT_REGISTERED)** and
+`dfsrreplicatedfolderinfo.State` was **2 (InitialSync) on BOTH DCs** — the
+classic 2-DC SYSVOL deadlock: each waits to do its initial non-authoritative
+sync *from the other*, and with neither in Normal state to source, it never
+converges. Almost certainly a legacy of the documented snapshot rollbacks +
+repeated cold boots resetting both DFSR databases to an initial-sync-needed
+state with no designated authoritative copy.
+
+**Repaired per KB2218556 (authoritative/non-authoritative sync):** dc1 made
+**authoritative (D4)** since it held the current/correct SYSVOL (all GPOs +
+the GPP fix) — set `msDFSR-Enabled=FALSE`+`msDFSR-options=1` on its SYSVOL
+subscription object, re-read config, then `msDFSR-Enabled=TRUE`, re-read ->
+event **4602** ("designated primary member") -> State Normal. Then dc2 made
+**non-authoritative (D2)** — toggle `msDFSR-Enabled` FALSE->TRUE (no options
+flag) -> events 4614 then **4604** ("completed initial synchronization of
+SYSVOL with partner DC1") -> State Normal. Afterwards: both State=Normal,
+backlog 0 ("dc2 in sync with dc1"), dc2's `Groups.xml` now matches dc1's
+fixed cpassword.
+
+Gotchas for next time:
+- The subscription object DNs are `CN=SYSVOL Subscription,CN=Domain System
+  Volume,CN=DFSR-LocalSettings,CN=<DC>,OU=Domain Controllers,DC=cyberhawks,DC=lab`.
+  The `Set-ADObject` writes work over a direct NTLM WinRM session when done
+  with `-Server <that same DC>` (loopback LDAP, same as the LAPS fix note).
+- **dc1 (Server 2016) does not have `dfsrdiag.exe` installed** (dc2/Server
+  2019 does). Used a **DFSR service restart** in place of `dfsrdiag pollad`
+  to force the config re-read on dc1 — equivalent effect.
+- `Get-GPO` run on dc2 fails with an LDAP "operations error" / shows up as
+  "unreachable" because it defaults to the PDC emulator (dc1) = a WinRM
+  double hop. Fetch the GPO GUID from dc1 and read dc2's SYSVOL by local
+  path instead.
+- `dfsrdiag syncnow /partner:<otherDC>` and `dfsrdiag backlog ... /smem
+  /rmem` must run under a *real* logon (scheduled-task pattern) — the
+  backlog *query* works but `syncnow` needs network creds the NTLM WinRM
+  token can't delegate.
+
+**New snapshot `detections-final-v5`** on dc1 (320) and dc2 (321) capturing
+both fixes, taken **one DC at a time with the other left running** — this is
+the critical safety practice (inherited from `detections-final-v4`'s
+approach) that prevents the cold-boot InitialSync deadlock from recurring:
+a DC rebooting with a healthy Normal partner resumes Normal cleanly, which
+both did (verified State=Normal + GPP fix intact + SYSVOL shared after each
+reboot). Event logs were cleared first on each (stopped `SplunkForwarder` +
+`Sysmon64`, `wevtutil cl` across all channels), then graceful `qm shutdown`
+-> snapshot -> `qm start`. `detections-final-v4` (2026-10-03) was **kept**,
+not overwritten, so the pre-fix state is still a rollback point. (Note: the
+live snapshot lineage on the DCs — `vulnerable-range-v2` -> ... ->
+`detections-final-v4` -> `detections-final-v5` — is ahead of what the older
+sections of this file describe; those sections predate the
+`detections-final-*` series.)
+
+**If both DCs are ever found in State=InitialSync again** (e.g. after rolling
+both back together to an inconsistent pair of DFSR DBs), re-run the same
+D4-on-the-good-DC / D2-on-the-other procedure above.
+
 ## GitHub
 
 Repos: `CyberHawks-IIT/cyber-range`, `CyberHawks-IIT/vm-templates`,
