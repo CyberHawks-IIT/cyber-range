@@ -19,8 +19,12 @@ function ConvertTo-GppCpassword {
     $encryptor = $aes.CreateEncryptor()
     $bytes = [System.Text.Encoding]::Unicode.GetBytes($Password)
     $encrypted = $encryptor.TransformFinalBlock($bytes, 0, $bytes.Length)
-    # GPP cpassword uses base64url, not standard base64: '+' -> '-', '/' -> '_', no padding.
-    return [Convert]::ToBase64String($encrypted).TrimEnd("=").Replace("+", "-").Replace("/", "_")
+    # GPP cpassword is STANDARD base64 (it legitimately contains '+' and '/') --
+    # NOT base64url. Decryptors (gpp-decrypt, netexec's gpp_password) call a
+    # standard base64 decode and re-pad '=' themselves, so emit plain base64;
+    # swapping '+'/'/' for '-'/'_' here makes those decoders drop the unknown
+    # chars and fail with "Data must be padded to 16 byte boundary in CBC mode."
+    return [Convert]::ToBase64String($encrypted)
 }
 
 # --- Move workstation into a dedicated OU so a GPO can actually be linked to it ---
