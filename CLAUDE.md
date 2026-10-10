@@ -840,8 +840,19 @@ account via the still-default MachineAccountQuota, as the student used with
   `computer2$` — same loopback-write path as the LAPS fix above). The edited
   `ad_acls/grant_acls.ps1` reproduces it on a rebuild (it adds the sql1$ ACE;
   a fresh build from `vulnerable-range-v2` never had the computer2$ ACE, so no
-  removal step is needed there). Live state is ahead of the current snapshot
-  until the next refresh.
+  removal step is needed there).
+- **Snapshot refreshed 2026-10-09:** `detections-final-v5` was replaced in
+  place on dc1 (320) and dc2 (321) to fold in this change — the only live
+  state that changed is AD-resident (the ACE + `CyberHawks$`), so just the two
+  DCs. Done one DC at a time with the partner left running (the DFSR cold-boot
+  guard), event logs cleared with Splunk/Sysmon stopped first. `detections-final-v4`
+  kept as the prior restore point. Post-boot verification on both: NTDS/DNS/
+  Netlogon/DFSR running, SYSVOL State=Normal + SYSVOL/NETLOGON shared, ADWS up,
+  `repadmin /showrepl localhost` 0 failures across 5 NCs, and the sql1$ RBCD ACE
+  present (absent on computer2$) from each DC's own view. (dcdiag's
+  `/test:Replications` reports a spurious `DsBindWithSpnEx error 5` when run
+  inside a WinRM session — the documented NTLM double-hop, not a real failure;
+  the local-bind `repadmin` is the authoritative reading.)
 
 ### Delegation coverage recap (each type appears exactly once)
 
