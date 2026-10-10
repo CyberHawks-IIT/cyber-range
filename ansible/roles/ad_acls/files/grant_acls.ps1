@@ -73,10 +73,18 @@ $kcl = Get-AttributeGuid "msDS-KeyCredentialLink"
 $computer3 = Get-ADComputer computer3
 Add-Ace -TargetDN $computer3.DistinguishedName -Rights WriteProperty -ObjectType $kcl -Label "WriteProperty(msDS-KeyCredentialLink)"
 
-# 4. WriteProperty(msDS-AllowedToActOnBehalfOfOtherIdentity) -> computer2
+# 4. WriteProperty(msDS-AllowedToActOnBehalfOfOtherIdentity) -> sql1
+# RBCD target must be a real, domain-joined host: a fabricated computer
+# object (as computer2 was) has no servicePrincipalName, so the KDC can't
+# resolve cifs/<name> during S4U2Proxy (KDC_ERR_S_PRINCIPAL_UNKNOWN) and
+# there's no live service to use the resulting ticket against. sql1 is a
+# real host (real HOST/ SPNs the KDC maps cifs/ onto, live SMB on 10.0.2.6).
+# This is a deliberate convergent second path onto sql1 (alongside the MSSQL
+# sysadmin-impersonation route) -- same pattern as web/sql2 -- and the write
+# target (sql1$) stays distinct from every other right user holds.
 $rbcd = Get-AttributeGuid "msDS-AllowedToActOnBehalfOfOtherIdentity"
-$computer2 = Get-ADComputer computer2
-Add-Ace -TargetDN $computer2.DistinguishedName -Rights WriteProperty -ObjectType $rbcd -Label "WriteProperty(msDS-AllowedToActOnBehalfOfOtherIdentity)"
+$sql1 = Get-ADComputer sql1
+Add-Ace -TargetDN $sql1.DistinguishedName -Rights WriteProperty -ObjectType $rbcd -Label "WriteProperty(msDS-AllowedToActOnBehalfOfOtherIdentity)"
 
 # 5. GenericAll -> Default Domain Policy GPO
 $gpo = Get-ADObject -Filter "objectClass -eq 'groupPolicyContainer' -and displayName -eq 'Default Domain Policy'"

@@ -678,7 +678,7 @@ not a precedent to follow.
 | Account | Password | Notes |
 |---|---|---|
 | user | `password` | a local admin on web from first boot (Unconstrained Delegation entry point), and the sole holder of every ACL-abuse right below: WriteDacl, GenericWrite, WriteProperty(KeyCredentialLink), WriteProperty(msDS-AllowedToActOnBehalfOfOtherIdentity), GenericAll on the Default Domain Policy GPO, Self on Domain Admins, ForceChangePassword, DCSync, WriteOwner, read rights on sql2's LAPS password, and ReadGMSAPassword on `gmsa-backup$` (added 2026-10-02) — one account, eleven rights, because each targets a different object and none of the resulting attacks collide |
-| computer | `password` | the one starter *computer* account, representing that source category on its own — used as the RBCD delegation identity written into computer2's msDS-AllowedToActOnBehalfOfOtherIdentity (atypical for a real machine account, which would normally have a ~120-char random secret — set to `password` deliberately so it's an obvious, memorable "starter kit" credential) |
+| computer | `password` | the one starter *computer* account, representing that source category on its own — used as the RBCD delegation identity written into sql1's msDS-AllowedToActOnBehalfOfOtherIdentity (atypical for a real machine account, which would normally have a ~120-char random secret — set to `password` deliberately so it's an obvious, memorable "starter kit" credential) |
 
 Earlier drafts of this design also handed out user2-user4 as filler accounts;
 they're dropped — nothing in the list below needs a second starter user, and
@@ -717,7 +717,7 @@ Per rule 6 above — the real usernames get filled in at provisioning time.
 - sql2's computer account (sql2$) has Constrained Delegation configured *with* protocol transition (T2A4D: `msDS-AllowedToDelegateTo` + `TRUSTED_TO_AUTH_FOR_DELEGATION`), targeting CIFS on dc1 — reached directly via user's LAPS-granted local admin on sql2 above (dump sql2$'s machine credentials, then S4U2Self+S4U2Proxy), with no need to have touched sql1 first; since the allow-list only names CIFS/dc1, this also teaches the alternate-service sname-substitution trick to pull an LDAP ticket instead and DCSync
 - 1000 users with usernames from [jsmith.txt](https://github.com/insidetrust/statistically-likely-usernames/blob/master/jsmith.txt), initialized with random 14 character passwords (excluding the literal string `password`, per the starter-access note above)
 - user and computer with password `password` — the only two starter accounts, see table above
-- user has WriteDacl on `poolUser_writedacl_target`, GenericWrite on `poolUser_genericwrite_target`, WriteProperty KeyCredentialLink on computer3, WriteProperty msDS-AllowedToActOnBehalfOfOtherIdentity on computer2, GenericAll on the "Default Domain Policy" GPO, Self on the "Domain Admins" group, ForceChangePassword on `poolUser_forcechangepw_target`, DCSync on the domain, WriteOwner on `poolUser_writeowner_target`, read rights on sql2's LAPS password (see above), and ReadGMSAPassword on `gmsa-backup$` (see the gMSA bullet below) — eleven rights, eleven non-overlapping targets, none of them a starter account; computer (not itself targeted by anything) is the pre-provisioned source used to complete the RBCD write on computer2
+- user has WriteDacl on `poolUser_writedacl_target`, GenericWrite on `poolUser_genericwrite_target`, WriteProperty KeyCredentialLink on computer3, WriteProperty msDS-AllowedToActOnBehalfOfOtherIdentity on sql1 (repointed from computer2 2026-10-09 — see the "RBCD target moved to sql1" subsection below), GenericAll on the "Default Domain Policy" GPO, Self on the "Domain Admins" group, ForceChangePassword on `poolUser_forcechangepw_target`, DCSync on the domain, WriteOwner on `poolUser_writeowner_target`, read rights on sql2's LAPS password (see above), and ReadGMSAPassword on `gmsa-backup$` (see the gMSA bullet below) — eleven rights, eleven non-overlapping targets, none of them a starter account; computer (not itself targeted by anything) is the pre-provisioned source used to complete the RBCD write on sql1 (any domain user can equally self-create a machine account for this via the unchanged MachineAccountQuota, as in the original exploitation)
 - default `ms-DS-MachineAccountQuota` (10) is left unchanged, so students who'd rather self-create a computer account than use computer for the RBCD write above can still do so
 - Domain Admin "admin" auto starts on boot an active session on web (maybe through a script?) — `admin` is not a starter account; reaching it requires the local-admin foothold below
 - user is a local admin on web from first boot (starter access, not something to be earned)
@@ -737,7 +737,7 @@ Per rule 6 above — the real usernames get filled in at provisioning time.
   | Account | IP |
   |---|---|
   | computer (starter) | 10.0.2.51 |
-  | computer2 (RBCD target) | 10.0.2.52 |
+  | computer2 (formerly RBCD target; now incidental — RBCD moved to sql1 2026-10-09) | 10.0.2.52 |
   | computer3 (Shadow Credentials target) | 10.0.2.53 |
   | computer4 (pre2k default password) | 10.0.2.54 |
   | computer5 (blank password) | 10.0.2.55 |
@@ -805,6 +805,44 @@ operations documented in the domain-build gotchas); the Ansible roles above
 reproduce it on a rebuild. Not yet re-snapshotted — the live state is ahead of
 `vulnerable-range-v2` until the next snapshot refresh.
 
+### RBCD target moved to sql1 (2026-10-09)
+
+The RBCD finding originally targeted `computer2` (user held WriteProperty on
+`computer2$`'s `msDS-AllowedToActOnBehalfOfOtherIdentity`). **That made the
+finding non-exploitable end-to-end**, surfaced by a student whose
+`getST.py -spn cifs/computer2.cyberhawks.lab -impersonate Administrator`
+failed. Root cause: `computer2` is a fabricated AD computer object created by
+`New-ADComputer` (ad_base_accounts) with **no `servicePrincipalName`** — a
+real machine registers its own `HOST/*` SPNs on domain join/boot; a bare
+object never does. So S4U2Proxy for `cifs/computer2` gives the KDC no
+principal to resolve (`KDC_ERR_S_PRINCIPAL_UNKNOWN`), and even a successfully
+issued ticket would have no live service at 10.0.2.52 to use it against.
+
+**Fix:** repointed the RBCD write-right from `computer2$` to `sql1$` — a real,
+domain-joined host with genuine `HOST/` SPNs (the KDC maps `cifs/` onto them)
+and a live SMB service on 10.0.2.6, so the full
+S4U2Self→S4U2Proxy→`cifs/sql1` → admin-on-sql1 chain works. The delegation
+source is unchanged (the starter `computer` account, or a self-created machine
+account via the still-default MachineAccountQuota, as the student used with
+`CyberHawks$`).
+
+- **Design compliance:** `sql1$` is distinct from every other target `user`'s
+  ten remaining rights land on, so no ACL overlap (rule 1). It *is* a
+  convergent second path onto sql1 alongside the MSSQL sysadmin-impersonation
+  route — intentional, matching the existing two-paths-to-one-host pattern on
+  web (user local admin + PrinterBug) and sql2 (LAPS + svc-mssql reuse). RBCD
+  still appears exactly once among the delegation types.
+- **`computer2` is now incidental** — left in place as a benign stale-looking
+  computer object (realistic enumeration noise); its object and DNS A/PTR
+  records were not removed. Nothing else references it as a target.
+- **Applied live** 2026-10-09 over a direct NTLM WinRM session to dc1 (loopback
+  `Set-Acl` on `AD:\CN=SQL1,...` to add the ACE, and removed the old ACE on
+  `computer2$` — same loopback-write path as the LAPS fix above). The edited
+  `ad_acls/grant_acls.ps1` reproduces it on a rebuild (it adds the sql1$ ACE;
+  a fresh build from `vulnerable-range-v2` never had the computer2$ ACE, so no
+  removal step is needed there). Live state is ahead of the current snapshot
+  until the next refresh.
+
 ### Delegation coverage recap (each type appears exactly once)
 
 | Variation | Host/account | Entry vector |
@@ -812,7 +850,7 @@ reproduce it on a rebuild. Not yet re-snapshotted — the live state is ahead of
 | Unconstrained (passive + coerced) | web | user local admin; PetitPotam/PrinterBug against dc1/dc2 |
 | Constrained, no protocol transition | sql1$ | any domain user, via sql1's sysadmin-impersonation bug |
 | Constrained, protocol transition (T2A4D) + sname substitution | sql2$ | user's LAPS-granted local admin on sql2 |
-| RBCD via direct ACL write | computer2 (delegation source: computer) | user's granted rights |
+| RBCD via direct ACL write | sql1$ (delegation source: computer, or a self-created machine account) | user's granted rights |
 | Shadow Credentials | computer3 | user's granted rights |
 | Cross-domain | — | explicitly excluded (single domain) |
 

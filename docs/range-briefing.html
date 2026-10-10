@@ -480,7 +480,7 @@
         </tbody>
       </table>
     </div>
-    <p class="section-note">computer, computer2, computer3, computer4, and computer5 also resolve on this subnet (10.0.2.51-.55), but they're AD objects only, with no OS behind them. They appear as targets below.</p>
+    <p class="section-note">computer, computer2, computer3, computer4, and computer5 also resolve on this subnet (10.0.2.51-.55), but they're AD objects only, with no OS behind them. computer, computer3, computer4, and computer5 appear as targets below; computer2 is incidental (its former role moved to a real host).</p>
 
     <div class="subhead alt"><span class="swatch"></span>Standalone - not domain-joined</div>
     <div class="tablewrap">
@@ -624,7 +624,7 @@
           <tr><td class="finding">Unconstrained Delegation</td><td class="who">user (local admin) <span class="arrow">or</span> PrinterBug coercion vs. a DC</td><td class="target mono">web$</td></tr>
           <tr><td class="finding">Constrained Delegation - no protocol transition</td><td class="who">any domain user, via sql1's sysadmin bug</td><td class="target mono">sql1$ <span class="arrow">→</span> CIFS/dc1</td></tr>
           <tr><td class="finding">Constrained Delegation - w/ protocol transition (T2A4D)</td><td class="who">user, via LAPS-granted admin on sql2</td><td class="target mono">sql2$ <span class="arrow">→</span> CIFS/dc1</td></tr>
-          <tr><td class="finding">Resource-Based Constrained Delegation</td><td class="who">user's ACL write, using computer as the delegate</td><td class="target mono">computer2</td></tr>
+          <tr><td class="finding">Resource-Based Constrained Delegation</td><td class="who">user's ACL write, using computer as the delegate</td><td class="target mono">sql1$</td></tr>
           <tr><td class="finding">Shadow Credentials</td><td class="who">user (write on msDS-KeyCredentialLink)</td><td class="target mono">computer3</td></tr>
         </tbody>
       </table>

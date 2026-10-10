@@ -125,7 +125,13 @@ switched from legacy LAPS's `ms-Mcs-AdmPwd` — see Phase C) → sql2's computer
 object (the only one of the ten with a hard dependency on C above). Note:
 computer2/computer3's delegation/shadow-cred *attributes* are deliberately
 left empty here — only the ACE granting user1 write access is created; the
-attribute write itself is the student's exploit step. All AD reads/writes
+attribute write itself is the student's exploit step.
+> **Update 2026-10-09:** the RBCD write-right was repointed from `computer2`
+> to `sql1$`. A fabricated computer object has no SPN, so the RBCD attack
+> wasn't exploitable end-to-end against it (KDC couldn't resolve
+> `cifs/computer2`); `sql1` is a real host. See the "RBCD target moved to
+> sql1" subsection in `CLAUDE.md` for the full root cause. `grant_acls.ps1`
+> now targets `sql1`; `computer2` remains as incidental filler. All AD reads/writes
 across every role are pinned to a single DC (dc1) rather than
 load-balancing, to avoid "object not found yet" races against the DC that
 didn't originate a given write.
