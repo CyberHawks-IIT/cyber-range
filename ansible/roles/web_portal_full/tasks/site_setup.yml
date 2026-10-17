@@ -1,0 +1,85 @@
+---
+# Runs against web. Installs IIS + the ASP.NET Core Hosting Bundle, deploys the
+# published app, and repoints the Default Web Site at it. The core range's
+# placeholder Phase G is skipped when range_full_portal is on, so this role
+# installs IIS itself rather than assuming the placeholder did.
+
+- name: Install IIS features needed to host ASP.NET Core
+  ansible.windows.win_feature:
+    name:
+      - Web-Server
+      - Web-Static-Content
+      - Web-Default-Doc
+      - Web-Http-Errors
+      - Web-Http-Logging
+      - Web-Filtering
+      - Web-Mgmt-Console
+    state: present
+  register: iis_feature
+
+- name: Download the ASP.NET Core {{ dotnet_hosting_bundle_version }} Hosting Bundle
+  ansible.windows.win_get_url:
+    url: "{{ dotnet_hosting_bundle_url }}"
+    dest: "C:\\Windows\\Temp\\dotnet-hosting-{{ dotnet_hosting_bundle_version }}-win.exe"
+
+- name: Install the ASP.NET Core Hosting Bundle (provides AspNetCoreModuleV2)
+  ansible.windows.win_package:
+    path: "C:\\Windows\\Temp\\dotnet-hosting-{{ dotnet_hosting_bundle_version }}-win.exe"
+    arguments: "/install /quiet /norestart"
+    creates_path: 'C:\Program Files\IIS\Asp.Net Core Module\V2\aspnetcorev2.dll'
+    state: present
+  register: hosting_bundle
+
+- name: Restart IIS so it registers the ASP.NET Core Module
+  ansible.windows.win_shell: iisreset
+  when: hosting_bundle is changed
+  changed_when: true
+  failed_when: false
+
+- name: Ensure the deploy directory exists
+  ansible.windows.win_file:
+    path: "{{ web_portal_full_deploy_dir }}"
+    state: directory
+
+- name: Deploy the published site to web
+  ansible.windows.win_copy:
+    src: "{{ (web_portal_full_src | length > 0) | ternary(web_portal_full_src, web_portal_full_build_dir) }}/publish/"
+    dest: "{{ web_portal_full_deploy_dir }}\\"
+
+- name: Write appsettings.Production.json pointing at sql1 via svc-web
+  ansible.windows.win_template:
+    src: appsettings.Production.json.j2
+    dest: "{{ web_portal_full_deploy_dir }}\\appsettings.Production.json"
+
+- name: Grant the app pool identity read/execute on the deploy dir
+  ansible.windows.win_acl:
+    path: "{{ web_portal_full_deploy_dir }}"
+    user: "IIS AppPool\\{{ web_portal_full_app_pool }}"
+    rights: ReadAndExecute
+    type: allow
+    state: present
+    inherit: ContainerInherit, ObjectInherit
+    propagation: 'None'
+
+- name: Point the Default Web Site at the app and run its pool with No Managed Code
+  ansible.windows.win_shell: |
+    Import-Module WebAdministration
+    Set-ItemProperty "IIS:\AppPools\{{ web_portal_full_app_pool }}" -Name managedRuntimeVersion -Value ''
+    Set-ItemProperty "IIS:\Sites\{{ web_portal_full_site_name }}" -Name physicalPath -Value '{{ web_portal_full_deploy_dir }}'
+  changed_when: true
+
+- name: Remove IIS default welcome page remnants (if the placeholder ran here before)
+  ansible.windows.win_file:
+    path: "C:\\inetpub\\wwwroot\\{{ item }}"
+    state: absent
+  loop:
+    - iisstart.htm
+    - iisstart.png
+
+- name: Restart the app pool and ensure the site is started
+  ansible.windows.win_shell: |
+    Import-Module WebAdministration
+    Restart-WebAppPool -Name '{{ web_portal_full_app_pool }}'
+    Start-Website -Name '{{ web_portal_full_site_name }}'
+  changed_when: true
+  failed_when: false

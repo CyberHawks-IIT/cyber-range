@@ -158,6 +158,13 @@ Windows-Auth-for-everyone finding); `Web.config` with the real `websvc` SQL
 login connection string; `Web.config.bak` left alongside it, retrievable
 over HTTP.
 
+  Optional full portal: the `range_full_portal` toggle (default false) swaps
+  this placeholder for the full ASP.NET Core 8 MVC portal from the web-app repo
+  (role `web_portal_full`, playbook `web-portal-full.yml`), built from source on
+  the control node and deployed to `web` under IIS. It keeps all of the findings
+  above and adds app-layer web vulns (see the web-app repo's SITE_PLAN.md). Off
+  by default; same opt-in model as `range_monitoring`.
+
 **H. ADCS ESC1–17 on `ca`** (role `adcs_esc_templates`, own snapshot
 checkpoint first) — research (SpecterOps/Certipy wiki) confirms several
 ESCs are not actually template-object misconfigurations at all. **Per

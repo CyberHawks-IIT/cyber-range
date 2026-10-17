@@ -30,6 +30,14 @@ Both build the same range. Setup 2 only adds monitoring on top, controlled by
 one toggle (`range_monitoring`). So you can start with setup 1 and add
 monitoring later without rebuilding anything.
 
+**Optional, across either setup:** by default `web` serves a lightweight
+placeholder "CyberHawks Employee Portal." Flip the `range_full_portal` toggle on
+and the range instead builds and deploys the full
+[web-app](https://github.com/CyberHawks-IIT/web-app) portal — same findings,
+plus a spread of app-layer web vulnerabilities. It's a one-toggle add-on, off by
+default, that you can turn on without rebuilding. See
+**[web-portal.md](docs/setup/web-portal.md)**.
+
 ## The range
 
 The core is a single AD forest **`cyberhawks.lab`** (NetBIOS `CYBERHAWKS`) on
@@ -57,6 +65,7 @@ findings list, and CLAUDE.md carries the design detail.
 | Repo | Layer |
 |---|---|
 | **cyber-range** *(this repo)* | The vulnerable range |
+| [web-app](https://github.com/CyberHawks-IIT/web-app) | The full CyberHawks Employee Portal web app (optional add-on, deployed by this repo) |
 | [vm-templates](https://github.com/CyberHawks-IIT/vm-templates) | Base VM and container builds (range OS templates, attacker templates, the Splunk and Zeek containers) |
 | [defense-tooling](https://github.com/CyberHawks-IIT/defense-tooling) | Splunk and Zeek monitoring stack |
 | [splunk-detections](https://github.com/CyberHawks-IIT/splunk-detections) | Detection content for that Splunk instance |
@@ -89,6 +98,7 @@ cyber-range/
       base-domain.yml        # clean domain build (DCs, CA, SQL, joins)
       vulnerable-range.yml   # the intentional misconfigurations
       detection-logging.yml  # host-side logging for setup 2 (imported by the above)
+      web-portal-full.yml    # optional full ASP.NET Core portal (range_full_portal)
     roles/
   CLAUDE.md                # running source of truth
 ```
@@ -101,6 +111,9 @@ containers lives in
 [vm-templates](https://github.com/CyberHawks-IIT/vm-templates). The monitoring
 stack lives in [defense-tooling](https://github.com/CyberHawks-IIT/defense-tooling).
 Detection content lives in
-[splunk-detections](https://github.com/CyberHawks-IIT/splunk-detections).
-Standalone offense tooling (reporting, scanning, attack-path analysis) is
-managed separately and not documented here.
+[splunk-detections](https://github.com/CyberHawks-IIT/splunk-detections). The
+full Employee Portal web application's source lives in
+[web-app](https://github.com/CyberHawks-IIT/web-app); this repo only owns
+building and deploying it into the range (the optional `range_full_portal`
+add-on). Standalone offense tooling (reporting, scanning, attack-path analysis)
+is managed separately and not documented here.

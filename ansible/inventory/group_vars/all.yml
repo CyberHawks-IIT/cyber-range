@@ -15,3 +15,21 @@
 #
 # Override per-run without editing this file: -e range_monitoring=true
 range_monitoring: false
+
+# Which web portal `web` serves. Independent of range_monitoring.
+#
+#   range_full_portal: false (default) -> the lightweight ASP.NET Web Forms
+#       "CyberHawks Employee Portal" placeholder (Default.aspx) built in by the
+#       core range's Phase G.
+#
+#   range_full_portal: true            -> the full ASP.NET Core 8 MVC portal
+#       from the web-app repo (https://github.com/CyberHawks-IIT/web-app).
+#       vulnerable-range.yml skips the placeholder Phase G and imports
+#       web-portal-full.yml instead: it builds the site from source on the
+#       control node (needs the .NET 8 SDK + git there), deploys it to `web`
+#       under IIS via the ASP.NET Core Hosting Bundle, and points it at sql1.
+#       Same externally observable findings as the placeholder, plus the
+#       app-layer web vulns in the web-app repo's SITE_PLAN.md.
+#
+# Override per-run without editing this file: -e range_full_portal=true
+range_full_portal: false

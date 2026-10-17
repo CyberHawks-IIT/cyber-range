@@ -1,0 +1,36 @@
+---
+# web_portal_full -- deploys the full ASP.NET Core 8 MVC "CyberHawks Employee
+# Portal" (the web-app repo) to `web`, replacing the lightweight Web Forms
+# placeholder the core range ships. Optional add-on, gated behind
+# range_full_portal (see group_vars/all.yml and playbooks/web-portal-full.yml).
+
+# --- Source: where to get the site and how it's built (on the control node) ---
+# By default the add-on clones the public web-app repo and builds it with the
+# .NET SDK on the control node. Point web_portal_full_src at a local checkout
+# to build from that instead (skips the clone), e.g. -e web_portal_full_src=/path/to/web-app.
+web_portal_full_repo: "https://github.com/CyberHawks-IIT/web-app.git"
+web_portal_full_repo_version: "master"
+web_portal_full_src: ""                       # local checkout; empty = clone the repo
+web_portal_full_build_dir: "/tmp/cyberhawks-web-app"     # clone + publish staging (control node)
+web_portal_full_csproj: "src/CyberHawksPortal/CyberHawksPortal.csproj"
+
+# --- Deploy target (on web) ---
+web_portal_full_deploy_dir: 'C:\inetpub\CyberHawksPortal'
+web_portal_full_site_name: "Default Web Site"
+web_portal_full_app_pool: "DefaultAppPool"
+
+# --- Database (on sql1) ---
+web_portal_full_db_name: "CyberHawksPortal"
+# The site's own leaked wwwroot\Web.config.bak advertises this exact svc-web
+# password, so creating the login with it keeps the leak -> working-creds chain
+# authentic without having to rewrite the site's static files. svc-web is used
+# only by the portal (nothing else in the range reads it), so this is safe to
+# set independently of the placeholder's generated svc_web_password.txt.
+web_portal_full_svc_web_password: "W3bP0rtal!Sv3c2024"
+
+# --- ASP.NET Core 8 Hosting Bundle (installed on web) ---
+# In-process IIS hosting needs the ASP.NET Core Module V2, which ships in the
+# Hosting Bundle. Pin a patch >= the app's runtime; override the URL if you
+# mirror the installer locally.
+dotnet_hosting_bundle_version: "8.0.11"
+dotnet_hosting_bundle_url: "https://builds.dotnet.microsoft.com/dotnet/aspnetcore/Runtime/{{ dotnet_hosting_bundle_version }}/dotnet-hosting-{{ dotnet_hosting_bundle_version }}-win.exe"

@@ -1,0 +1,53 @@
+---
+# Runs on the control node (localhost). Clones the web-app repo (unless a local
+# checkout is supplied) and publishes the site with the .NET 8 SDK into a
+# staging dir that site_setup then copies to `web`. Needs the .NET 8 SDK and,
+# for the default clone path, git on the control node.
+
+- name: Check for the .NET SDK on the control node
+  ansible.builtin.command: dotnet --list-sdks
+  register: dotnet_sdks
+  changed_when: false
+  failed_when: dotnet_sdks.rc != 0
+
+- name: Require a .NET 8 SDK
+  ansible.builtin.assert:
+    that:
+      - dotnet_sdks.stdout_lines | select('match', '^8\\.') | list | length > 0
+    fail_msg: >-
+      A .NET 8 SDK is required on the control node to build the full portal.
+      Install it (https://dotnet.microsoft.com/download/dotnet/8.0), or build
+      web-app elsewhere and pass -e web_portal_full_src=/path/to/web-app.
+    success_msg: ".NET 8 SDK present: {{ dotnet_sdks.stdout_lines | select('match', '^8\\.') | list }}"
+
+- name: Clone/update the web-app repo (skipped when web_portal_full_src is set)
+  ansible.builtin.git:
+    repo: "{{ web_portal_full_repo }}"
+    dest: "{{ web_portal_full_build_dir }}"
+    version: "{{ web_portal_full_repo_version }}"
+    force: true
+  when: web_portal_full_src | length == 0
+
+- name: Resolve the source directory to build from
+  ansible.builtin.set_fact:
+    web_portal_full_source_dir: "{{ (web_portal_full_src | length > 0) | ternary(web_portal_full_src, web_portal_full_build_dir) }}"
+
+- name: Publish the site (Release, framework-dependent -- the Hosting Bundle supplies the runtime)
+  ansible.builtin.command:
+    cmd: >-
+      dotnet publish {{ web_portal_full_csproj }}
+      -c Release
+      -o {{ web_portal_full_source_dir }}/publish
+    chdir: "{{ web_portal_full_source_dir }}"
+  register: dotnet_publish
+  changed_when: true
+
+- name: Confirm the publish output exists
+  ansible.builtin.stat:
+    path: "{{ web_portal_full_source_dir }}/publish/CyberHawksPortal.dll"
+  register: publish_dll
+
+- name: Fail if the build produced no app DLL
+  ansible.builtin.assert:
+    that: publish_dll.stat.exists
+    fail_msg: "dotnet publish did not produce CyberHawksPortal.dll -- see the build output above."

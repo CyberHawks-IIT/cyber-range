@@ -1,0 +1,71 @@
+# Optional add-on: deploy the FULL CyberHawks Employee Portal -- the ASP.NET
+# Core 8 MVC site from the web-app repo (https://github.com/CyberHawks-IIT/web-app)
+# -- in place of the lightweight Web Forms placeholder the core range ships.
+#
+# This is gated behind the `range_full_portal` toggle (group_vars/all.yml,
+# default false): vulnerable-range.yml skips the placeholder Phase G and imports
+# this playbook instead when range_full_portal is true. You can also run it
+# directly:
+#   ansible-playbook playbooks/web-portal-full.yml -e range_full_portal=true
+#   ansible-playbook playbooks/web-portal-full.yml --tags web_portal_full -e range_full_portal=true
+#
+# Prerequisites: the .NET 8 SDK on the control node (the site is built from
+# source there), and git for the default clone of the web-app repo. Point at a
+# local checkout instead with -e web_portal_full_src=/path/to/web-app.
+#
+# The full portal keeps the same externally observable findings as the
+# placeholder (the Web.config.bak svc-web leak, the portal DB readable by all
+# domain users, admin/abc123) and adds the app-layer web vulns documented in
+# the web-app repo's SITE_PLAN.md.
+
+- name: Full portal - build the site on the control node (dotnet publish)
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tags: [web_portal_full]
+  tasks:
+    - ansible.builtin.import_role:
+        name: web_portal_full
+        tasks_from: build
+
+- name: Full portal - prepare sql1 (drop stale DB, svc-web login, dbcreator)
+  hosts: sql1
+  gather_facts: false
+  tags: [web_portal_full]
+  tasks:
+    - ansible.builtin.import_role:
+        name: web_portal_full
+        tasks_from: db_prep
+
+- name: Full portal - deploy the site to web under IIS (Hosting Bundle)
+  hosts: web
+  gather_facts: false
+  tags: [web_portal_full]
+  tasks:
+    - ansible.builtin.import_role:
+        name: web_portal_full
+        tasks_from: site_setup
+
+- name: Full portal - warm up the site so it creates and seeds its database
+  hosts: web
+  gather_facts: false
+  tags: [web_portal_full]
+  tasks:
+    - name: First request triggers EF EnsureCreated + DbSeeder
+      ansible.windows.win_uri:
+        url: http://localhost/
+        method: GET
+        status_code: [200, 302]
+      register: warmup
+      retries: 20
+      delay: 6
+      until: warmup.status_code is defined and warmup.status_code in [200, 302]
+
+- name: Full portal - apply "portal DB readable by all domain users" on sql1
+  hosts: sql1
+  gather_facts: false
+  tags: [web_portal_full]
+  tasks:
+    - ansible.builtin.import_role:
+        name: web_portal_full
+        tasks_from: db_grant_readers

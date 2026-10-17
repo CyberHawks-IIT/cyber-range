@@ -149,7 +149,13 @@
         name: mssql_misconfig
         tasks_from: sql1
 
-- name: Phase G - CyberHawksPortal database on sql1
+# Phase G ships the lightweight Web Forms "CyberHawks Employee Portal"
+# placeholder by default. The optional full ASP.NET Core MVC portal (web-app
+# repo) replaces it when range_full_portal is on -- in that case these two
+# placeholder plays are skipped and web-portal-full.yml is imported at the end
+# instead. Either way, `web` ends up serving an Employee Portal backed by sql1,
+# leaking svc-web via Web.config.bak, with the DB readable by all domain users.
+- name: Phase G - CyberHawksPortal database on sql1 (placeholder)
   hosts: sql1
   gather_facts: false
   tags: [website]
@@ -157,8 +163,9 @@
     - ansible.builtin.import_role:
         name: web_portal
         tasks_from: db_setup
+      when: not (range_full_portal | default(false) | bool)
 
-- name: Phase G - CyberHawks Employee Portal website on web
+- name: Phase G - CyberHawks Employee Portal website on web (placeholder)
   hosts: web
   gather_facts: false
   tags: [website]
@@ -166,6 +173,7 @@
     - ansible.builtin.import_role:
         name: web_portal
         tasks_from: site_setup
+      when: not (range_full_portal | default(false) | bool)
 
 - name: Phase H - Build ESC templates (ESC1,2,3,4,9,13,15,17)
   hosts: dc1
@@ -297,6 +305,13 @@
   tags: [host_privesc]
   roles:
     - workstation_privesc
+
+# Optional full web portal - replaces the Phase G placeholder with the full
+# ASP.NET Core MVC portal (web-app repo) when the range_full_portal toggle is on
+# (group_vars/all.yml, default false). The placeholder Phase G plays above are
+# skipped in that case. You can also run playbooks/web-portal-full.yml directly.
+- ansible.builtin.import_playbook: web-portal-full.yml
+  when: range_full_portal | default(false) | bool
 
 # Phase Q - host-side detection logging (Monitoring rollout plan step 2). Only
 # needed for the "vulnerable hosts + defense VMs and tooling" setup (option 2),

@@ -1,0 +1,36 @@
+---
+# Runs against sql1 after the app has created its DB (the warm-up request in
+# the playbook triggers EnsureCreated + seeding). Applies the "portal DB
+# readable by all domain users" finding once the DB exists.
+
+- name: Upload Domain Users read-grant script
+  ansible.windows.win_copy:
+    src: grant_domain_users.sql
+    dest: "C:\\Windows\\Temp\\web_portal_full_grant.sql"
+
+- name: Wait for the portal DB to exist (the app creates it on first start)
+  ansible.windows.win_shell: >
+    sqlcmd -S localhost -E -h -1 -W
+    -Q "SET NOCOUNT ON; SELECT CASE WHEN DB_ID('{{ web_portal_full_db_name }}') IS NULL THEN 'NO' ELSE 'YES' END"
+  register: db_exists
+  retries: 30
+  delay: 5
+  until: "'YES' in db_exists.stdout"
+  changed_when: false
+
+- name: Grant CYBERHAWKS\Domain Users read on the portal DB
+  ansible.windows.win_shell: >
+    sqlcmd -S localhost -E
+    -v PortalDb="{{ web_portal_full_db_name }}"
+    -i C:\Windows\Temp\web_portal_full_grant.sql
+  register: grant_result
+  changed_when: true
+
+- name: Show grant result
+  ansible.builtin.debug:
+    var: grant_result.stdout_lines
+
+- name: Remove temp grant script from sql1
+  ansible.windows.win_file:
+    path: "C:\\Windows\\Temp\\web_portal_full_grant.sql"
+    state: absent

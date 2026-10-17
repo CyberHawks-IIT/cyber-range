@@ -1,0 +1,27 @@
+---
+# Runs against sql1. Drops any stale placeholder DB, (re)creates the svc-web
+# login with the password the site's leak advertises, and grants it dbcreator
+# so the app can build its own database on first start.
+
+- name: Upload portal DB-prep script
+  ansible.windows.win_copy:
+    src: db_prep.sql
+    dest: "C:\\Windows\\Temp\\web_portal_full_db_prep.sql"
+
+- name: Run portal DB prep (drop stale DB, svc-web login, dbcreator)
+  ansible.windows.win_shell: >
+    sqlcmd -S localhost -E
+    -v PortalDb="{{ web_portal_full_db_name }}"
+    SvcWebPassword="{{ web_portal_full_svc_web_password }}"
+    -i C:\Windows\Temp\web_portal_full_db_prep.sql
+  register: db_prep_result
+  changed_when: true
+
+- name: Show DB-prep result
+  ansible.builtin.debug:
+    var: db_prep_result.stdout_lines
+
+- name: Remove temp DB-prep script from sql1
+  ansible.windows.win_file:
+    path: "C:\\Windows\\Temp\\web_portal_full_db_prep.sql"
+    state: absent

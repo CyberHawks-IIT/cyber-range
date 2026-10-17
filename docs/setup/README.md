@@ -14,6 +14,12 @@ Both setups build the identical vulnerable range. Setup 2 only adds monitoring
 on top, controlled by one toggle (`range_monitoring`), so you can start with
 setup 1 and add monitoring later without rebuilding.
 
+**Optional add-on (either setup): the full web portal.** By default `web` serves
+a lightweight placeholder Employee Portal. One toggle (`range_full_portal`)
+swaps in the full [web-app](https://github.com/CyberHawks-IIT/web-app) portal
+instead — same findings, plus app-layer web vulnerabilities. It's off by default
+and can be turned on without rebuilding. See **[web-portal.md](web-portal.md)**.
+
 Each guide is self-contained and copy-pasteable, with a check after every major
 step so you know it worked before moving on. Read the whole "Prerequisites"
 section of your chosen guide first. A few pieces (VM templates, SQL Server
